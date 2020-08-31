@@ -33,159 +33,251 @@
 
 import { join } from 'path';
 
-import './fetchProxy';
-import { intervals, NgrokInstance } from './ngrok';
+import {
+  ngrokTunnel,
+  updateTunnelError,
+  NgrokTunnelAction,
+  StatusCheckOnTunnel,
+  TunnelStatus,
+} from '@bfemulator/app-shared';
+import { createStore, combineReducers } from 'redux';
 
+import './fetchProxy';
+
+import { intervals, NgrokInstance } from './ngrok';
+import { intervalForEachPing } from './state/sagas/ngrokSagas';
+
+const mockExistsSync = jest.fn(() => true);
+const mockDispatch = jest.fn();
+let mockStore;
+
+jest.mock('./state', () => ({
+  get dispatch() {
+    return mockDispatch;
+  },
+  get store() {
+    return mockStore;
+  },
+}));
+
+const headersMap: Map<string, string> = new Map();
+headersMap.set('Server', 'Emulator');
+const tunnelResponseGeneric = (status: number, errorBody: string, headers = headersMap) => {
+  return {
+    text: async () => errorBody,
+    status,
+    headers,
+  };
+};
+
+const mockTunnelStatusResponse = jest.fn(() => tunnelResponseGeneric(200, 'success'));
+
+const connectToNgrokInstance = async (ngrok: NgrokInstance) => {
+  try {
+    const result = await ngrok.connect({
+      addr: 61914,
+      path: 'Applications/ngrok',
+      name: 'c87d3e60-266e-11e9-9528-5798e92fee89',
+      proto: 'http',
+    });
+    return result;
+  } catch (e) {
+    throw e;
+  }
+};
 const mockSpawn = {
   on: () => {},
-  stdin: { on: (type, cb) => void 0 },
+  stdin: { on: () => void 0 },
   stdout: {
     pause: () => void 0,
     on: (type, cb) => {
       if (type === 'data') {
-        setTimeout(() =>
-          cb('t=2019-02-01T14:10:08-0800 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4041')
-        );
+        cb('t=2019-02-01T14:10:08-0800 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4041');
       }
     },
     removeListener: () => void 0,
   },
-  stderr: { on: (type, cb) => void 0, pause: () => void 0 },
+  stderr: { on: () => void 0, pause: () => void 0 },
   kill: () => void 0,
 };
 
+let mockOk = 0;
 jest.mock('child_process', () => ({
   spawn: () => mockSpawn,
 }));
 
-let mockOk = 0;
+jest.mock('fs', () => ({
+  existsSync: () => mockExistsSync(),
+  mkdirSync: jest.fn(),
+  writeFileSync: jest.fn(),
+  createWriteStream: () => ({
+    write: jest.fn(),
+    end: jest.fn(),
+  }),
+}));
+
+jest.mock('./utils/ensureStoragePath', () => ({ ensureStoragePath: () => '' }));
 jest.mock('node-fetch', () => {
+  const ngrokPublicUrl = 'https://d1a2bf16.ngrok.io';
   const mockJson = {
     name: 'e2cfb800-266f-11e9-bc59-e5847cdee2d1',
     uri: '/api/tunnels/e2cfb800-266f-11e9-bc59-e5847cdee2d1',
     proto: 'https',
   };
   Object.defineProperty(mockJson, 'public_url', {
-    value: 'https://d1a2bf16.ngrok.io',
+    value: ngrokPublicUrl,
   });
-  return async (input, init) => {
-    return {
-      ok: ++mockOk > 0,
-      json: async () => mockJson,
-      text: async () => 'oh noes!',
-    };
+  return async (input, params) => {
+    switch (input) {
+      case ngrokPublicUrl:
+        if (params.method === 'DELETE') {
+          return {
+            ok: ++mockOk > 0,
+            json: async () => mockJson,
+            text: async () => 'oh noes!',
+          };
+        }
+        return mockTunnelStatusResponse();
+
+      default:
+        return {
+          ok: ++mockOk > 0,
+          json: async () => mockJson,
+          text: async () => 'oh noes!',
+        };
+    }
   };
 });
 
-const mockExistsSync = jest.fn(() => true);
-jest.mock('fs', () => ({
-  existsSync: () => mockExistsSync(),
-}));
-
 describe('the ngrok ', () => {
-  const ngrok = new NgrokInstance();
+  let ngrok: NgrokInstance;
+
+  beforeEach(() => {
+    jest.useRealTimers();
+    mockDispatch.mockImplementation((args: NgrokTunnelAction<StatusCheckOnTunnel>) =>
+      args.payload.onTunnelPingSuccess()
+    );
+    mockStore = createStore(combineReducers({ ngrokTunnel }));
+    ngrok = new NgrokInstance();
+    ngrok.ngrokEmitter.removeAllListeners();
+    mockOk = 0;
+  });
 
   afterEach(() => {
     ngrok.kill();
+    jest.useRealTimers();
   });
 
-  it('should spawn ngrok successfully when the happy path is followed', async () => {
-    const result = await ngrok.connect({
-      addr: 61914,
-      path: '/Applications/ngrok',
-      name: 'c87d3e60-266e-11e9-9528-5798e92fee89',
-      proto: 'http',
-    });
-    expect(result).toEqual({
-      inspectUrl: 'http://127.0.0.1:4041',
-      url: 'https://d1a2bf16.ngrok.io',
-    });
-  });
-
-  it('should retry if the request to retrieve the ngrok url fails the first time', async () => {
-    mockOk = -5;
-    await ngrok.connect({
-      addr: 61914,
-      path: '/Applications/ngrok',
-      name: 'c87d3e60-266e-11e9-9528-5798e92fee89',
-      proto: 'http',
-    });
-
-    expect(mockOk).toBe(1);
-  });
-
-  it('should emit when the ngrok session is expired', async () => {
-    mockOk = 0;
-    intervals.retry = 100;
-    intervals.expirationPoll = 1;
-    intervals.expirationTime = -1;
-    let emitted = false;
-    ngrok.ngrokEmitter.on('expired', () => {
-      emitted = true;
-    });
-    await ngrok.connect({
-      addr: 61914,
-      path: '/Applications/ngrok',
-      name: 'c87d3e60-266e-11e9-9528-5798e92fee89',
-      proto: 'http',
-    });
-    await new Promise(resolve => {
-      setTimeout(resolve, 100);
-    });
-    expect(emitted).toBe(true);
-  });
-
-  it('should disconnect', async () => {
-    let disconnected = false;
-    ngrok.ngrokEmitter.on('disconnect', url => {
-      disconnected = true;
-    });
-
-    await ngrok.connect({
-      addr: 61914,
-      path: '/Applications/ngrok',
-      name: 'c87d3e60-266e-11e9-9528-5798e92fee89',
-      proto: 'http',
-    });
-    await ngrok.disconnect();
-    expect(disconnected).toBe(true);
-  });
-
-  it('should throw when the number of reties to retrieve the ngrok url are exhausted', async () => {
-    mockOk = -101;
-    let threw = false;
-    intervals.retry = 1;
-    try {
-      await ngrok.connect({
-        addr: 61914,
-        path: '/Applications/ngrok',
-        name: 'c87d3e60-266e-11e9-9528-5798e92fee89',
-        proto: 'http',
+  describe('ngrok connect/disconnect operations', () => {
+    it('should spawn ngrok successfully when the happy path is followed', async () => {
+      const result = await connectToNgrokInstance(ngrok);
+      expect(result).toEqual({
+        inspectUrl: 'http://127.0.0.1:4041',
+        url: 'https://d1a2bf16.ngrok.io',
       });
-    } catch (e) {
-      threw = e;
-    }
-    expect(threw.toString()).toBe('Error: oh noes!');
+    });
+
+    it('should retry if the request to retrieve the ngrok url fails the first time', async () => {
+      mockOk = -5;
+      await connectToNgrokInstance(ngrok);
+      expect(mockOk).toBe(1);
+    });
+
+    it('should disconnect', async done => {
+      let disconnected = false;
+      ngrok.ngrokEmitter.on('disconnect', () => {
+        disconnected = true;
+        expect(disconnected).toBe(true);
+        done();
+      });
+
+      await connectToNgrokInstance(ngrok);
+      await ngrok.disconnect();
+    });
+
+    it('should throw when the number of reties to retrieve the ngrok url are exhausted.', async () => {
+      mockOk = -101;
+      let threw = false;
+      intervals.retry = 1;
+      try {
+        await connectToNgrokInstance(ngrok);
+      } catch (e) {
+        threw = e;
+      }
+      expect(threw.toString()).toBe('Error: oh noes!');
+    });
+
+    it('should throw if it failed to find an ngrok executable at the specified path.', async () => {
+      mockExistsSync.mockReturnValueOnce(false);
+
+      const path = join('Applications', 'ngrok');
+      let thrown;
+      try {
+        await connectToNgrokInstance(ngrok);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown.toString()).toBe(
+        `Error: Could not find ngrok executable at path: ${path}. Make sure that the correct path to ngrok is configured in the Emulator app settings. Ngrok is required to receive a token from the Bot Framework token service.`
+      );
+    });
   });
 
-  it('should throw if it failed to find an ngrok executable at the specified path', async () => {
-    mockExistsSync.mockReturnValueOnce(false);
-
-    const path = join('Applications', 'ngrok');
-    let thrown;
-    try {
-      await ngrok.connect({
-        addr: 61914,
-        path,
-        name: 'c87d3e60-266e-11e9-9528-5798e92fee89',
-        proto: 'http',
+  describe('ngrok tunnel heath status check operations', () => {
+    it('should check tunnel status every minute and report success if tunnel ping was a success.', async done => {
+      jest.useFakeTimers();
+      await connectToNgrokInstance(ngrok);
+      ngrok.ngrokEmitter.on('onTunnelStatusPing', (msg: TunnelStatus) => {
+        expect(msg).toEqual(TunnelStatus.Active);
+        done();
       });
-    } catch (e) {
-      thrown = e;
-    }
+      jest.advanceTimersByTime(intervalForEachPing + 1);
+    });
 
-    expect(thrown.toString()).toBe(
-      `Error: Could not find ngrok executable at path: ${path}. Make sure that the correct path to ngrok is configured in the Emulator app settings. Ngrok is required to receive a token from the Bot Framework token service.`
-    );
+    // First minute generates a Too many connections error. Second minute the tunnel resets back to an active state
+    it('Should not emit onTunnel error if ngrok tunnel error state has not changed to prevent notification flooding.', async done => {
+      //Situation where ngrok saga does the ping and calls onTunnelPingError with status 400. Before the next ping happens dispatching an action to set the state to reflect the same. Hence, no notificaiton flooding.
+      jest.useFakeTimers();
+      const tunnelErrorMock = jest.fn();
+      ngrok.ngrokEmitter.on('onTunnelError', tunnelErrorMock);
+
+      mockDispatch.mockImplementation((args: NgrokTunnelAction<StatusCheckOnTunnel>) => {
+        args.payload.onTunnelPingError({
+          status: 400,
+          text: 'Tunnel does not exist',
+        });
+      });
+      await connectToNgrokInstance(ngrok);
+      mockStore.dispatch(
+        updateTunnelError({
+          statusCode: 400,
+          errorMessage: 'Tunnel does not exist',
+        })
+      );
+      jest.advanceTimersByTime(intervalForEachPing + 1);
+      expect(tunnelErrorMock).toBeCalledTimes(1);
+      done();
+    });
+
+    // // First minute generates a Too many connections error for first minute. Second minute the tunnel resets back to an active state
+    it('Should dynamically check for status change every minute. ', async done => {
+      jest.useFakeTimers();
+      mockDispatch.mockImplementationOnce((args: NgrokTunnelAction<StatusCheckOnTunnel>) => {
+        args.payload.onTunnelPingError({
+          text: 'Tunnel has too many connections',
+          status: 422,
+        });
+      });
+      ngrok.ngrokEmitter.on('onTunnelError', err => {
+        expect(err.statusCode).toEqual(422);
+        expect(err.errorMessage).toBe('Tunnel has too many connections');
+      });
+      await connectToNgrokInstance(ngrok);
+      ngrok.ngrokEmitter.on('onTunnelStatusPing', (status: TunnelStatus) => {
+        expect(status).toBe(TunnelStatus.Active);
+        done();
+      });
+      jest.advanceTimersByTime(60001);
+    });
   });
 });

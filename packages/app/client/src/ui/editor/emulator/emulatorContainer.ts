@@ -31,20 +31,34 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 import { connect } from 'react-redux';
-import { Notification, SharedConstants, ValueTypesMask } from '@bfemulator/app-shared';
+import {
+  beginAdd,
+  clearLog,
+  disable as disablePresentationMode,
+  enable as enablePresentationMode,
+  executeCommand,
+  restartConversation,
+  setInspectorObjects,
+  updateChat,
+  updateDocument,
+  Document,
+  Notification,
+  SharedConstants,
+  ValueTypesMask,
+  setRestartConversationStatus,
+  RestartConversationStatus,
+  RestartConversationOptions,
+  setRestartConversationOption,
+} from '@bfemulator/app-shared';
 
 import { RootState } from '../../../state/store';
-import * as PresentationActions from '../../../state/actions/presentationActions';
-import * as ChatActions from '../../../state/actions/chatActions';
-import { Document } from '../../../state/reducers/editor';
-import { updateDocument } from '../../../state/actions/editorActions';
-import { beginAdd } from '../../../state/actions/notificationActions';
-import { executeCommand } from '../../../state/actions/commandActions';
-import { restartConversation } from '../../../state/actions/botActions';
 
 import { Emulator, EmulatorProps } from './emulator';
 
-const mapStateToProps = (state: RootState, { documentId, ...ownProps }: { documentId: string }): EmulatorProps => {
+const mapStateToProps = (
+  state: RootState,
+  { documentId, ...ownProps }: { documentId: string }
+): Partial<EmulatorProps> => {
   return {
     activeDocumentId: state.editor.editors[state.editor.activeEditor].activeDocumentId,
     activities: state.chat.chats[documentId].activities,
@@ -54,35 +68,38 @@ const mapStateToProps = (state: RootState, { documentId, ...ownProps }: { docume
     documentId,
     endpointId: state.chat.chats[documentId].endpointId,
     framework: state.framework,
-    inMemory: state.chat.chats[documentId].inMemory,
     presentationModeEnabled: state.presentation.enabled,
     ui: state.chat.chats[documentId].ui,
     url: state.clientAwareSettings.serverUrl,
     userId: state.chat.chats[documentId].userId,
+    restartStatus: state.chat.restartStatus[documentId],
+    currentRestartConversationOption: state.chat.chats[documentId].restartConversationOption,
     ...ownProps,
   };
 };
 
-const mapDispatchToProps = (dispatch): EmulatorProps => ({
-  enablePresentationMode: enable =>
-    enable ? dispatch(PresentationActions.enable()) : dispatch(PresentationActions.disable()),
-  setInspectorObjects: (documentId, objects) => dispatch(ChatActions.setInspectorObjects(documentId, objects)),
+const mapDispatchToProps = (dispatch): Partial<EmulatorProps> => ({
   clearLog: (documentId: string) => {
-    return new Promise(resolve => {
-      dispatch(ChatActions.clearLog(documentId, resolve));
-    });
+    dispatch(clearLog(documentId));
   },
-  restartDebugSession: (conversationId, documentId) => dispatch(restartConversation(conversationId, documentId)),
-  newConversation: (documentId, options) => dispatch(ChatActions.newConversation(documentId, options)),
-  updateChat: (documentId: string, updatedValues: any) => dispatch(ChatActions.updateChat(documentId, updatedValues)),
-  updateDocument: (documentId, updatedValues: Partial<Document>) => dispatch(updateDocument(documentId, updatedValues)),
   createErrorNotification: (notification: Notification) => dispatch(beginAdd(notification)),
-  trackEvent: (name: string, properties?: { [key: string]: any }) =>
-    dispatch(executeCommand(true, SharedConstants.Commands.Telemetry.TrackEvent, null, name, properties)),
+  enablePresentationMode: (enabled: boolean) =>
+    enabled ? dispatch(enablePresentationMode()) : dispatch(disablePresentationMode()),
   exportItems: (valueTypes: ValueTypesMask, conversationId: string) =>
     dispatch(
       executeCommand(true, SharedConstants.Commands.Emulator.SaveTranscriptToFile, null, valueTypes, conversationId)
     ),
+  restartConversation: (documentId: string, requireNewConversationId: boolean, requireNewUserId: boolean) =>
+    dispatch(restartConversation(documentId, requireNewConversationId, requireNewUserId)),
+  setInspectorObjects: (documentId, objects) => dispatch(setInspectorObjects(documentId, objects)),
+  trackEvent: (name: string, properties?: { [key: string]: any }) =>
+    dispatch(executeCommand(true, SharedConstants.Commands.Telemetry.TrackEvent, null, name, properties)),
+  updateChat: (documentId: string, updatedValues: any) => dispatch(updateChat(documentId, updatedValues)),
+  updateDocument: (documentId, updatedValues: Partial<Document>) => dispatch(updateDocument(documentId, updatedValues)),
+  onStopRestartConversationClick: (documentId: string) =>
+    dispatch(setRestartConversationStatus(RestartConversationStatus.Rejected, documentId)),
+  onSetRestartConversationOptionClick: (documentId: string, option: RestartConversationOptions) =>
+    dispatch(setRestartConversationOption(documentId, option)),
 });
 
 export const EmulatorContainer = connect(mapStateToProps, mapDispatchToProps)(Emulator);

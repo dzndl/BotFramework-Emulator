@@ -33,19 +33,7 @@
 
 import { Action, applyMiddleware, createStore, combineReducers, Store } from 'redux';
 import { ipcMain } from 'electron';
-import {
-  settingsDefault,
-  Settings,
-  SettingsImpl,
-  ClientAwareSettings,
-  FrameworkSettings,
-} from '@bfemulator/app-shared';
 import sagaMiddlewareFactory from 'redux-saga';
-
-import { loadSettings, getThemes } from '../utils';
-
-import { settingsSagas } from './sagas';
-import { forwardToRenderer } from './middleware/forwardToRenderer';
 import {
   AzureAuthState,
   azureAuth,
@@ -66,22 +54,33 @@ import {
   ProtocolState,
   resources,
   savedBotUrls,
+  settingsDefault,
   theme,
   update,
-  users,
   windowState,
   ChatState,
+  ClientAwareSettings,
   DialogState,
   EditorState,
   ExplorerState,
+  FrameworkSettings,
   NavBarState,
   NotificationState,
   PresentationState,
   ProgressIndicatorState,
   ResourcesState,
+  Settings,
+  SettingsImpl,
   ThemeState,
   UpdateState,
-} from './reducers';
+  NgrokTunnelState,
+  ngrokTunnel,
+} from '@bfemulator/app-shared';
+
+import { loadSettings, getThemes } from '../utils';
+
+import { ngrokSagas, settingsSagas } from './sagas';
+import { forwardToRenderer } from './middleware/forwardToRenderer';
 
 export interface RootState {
   azureAuth?: AzureAuthState;
@@ -101,6 +100,7 @@ export interface RootState {
   settings?: Settings;
   theme?: ThemeState;
   update?: UpdateState;
+  ngrokTunnel?: NgrokTunnelState;
 }
 
 export const DEFAULT_STATE = {
@@ -117,7 +117,6 @@ function initStore(): Store<RootState> {
     framework,
     savedBotUrls,
     windowState,
-    users,
   });
 
   const sagaMiddleware = sagaMiddlewareFactory();
@@ -140,11 +139,14 @@ function initStore(): Store<RootState> {
       settings: settingsReducer,
       theme,
       update,
+      ngrokTunnel,
     }),
     DEFAULT_STATE,
     applyMiddleware(forwardToRenderer, sagaMiddleware)
   );
-  sagaMiddleware.run(settingsSagas);
+
+  const sagas = [settingsSagas, ngrokSagas];
+  sagas.forEach(saga => sagaMiddleware.run(saga));
 
   // sync the main process store with any updates on the renderer process
   ipcMain.on('sync-store', (ev, action) => {

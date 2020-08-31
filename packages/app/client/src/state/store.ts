@@ -34,10 +34,7 @@
 import { applyMiddleware, createStore, combineReducers, compose, Store } from 'redux';
 import { ipcRenderer, remote } from 'electron';
 import sagaMiddlewareFactory from 'redux-saga';
-import { Settings, ClientAwareSettings, FrameworkSettings } from '@bfemulator/app-shared';
-
-import { forwardToMain } from './middleware/forwardToMain';
-import { applicationSagas } from './sagas';
+import { call, all, spawn } from 'redux-saga/effects';
 import {
   AzureAuthState,
   azureAuth,
@@ -45,11 +42,13 @@ import {
   bot,
   BotState,
   chat,
+  ClientAwareSettings,
   clientAwareSettings,
   dialog,
   editor,
   explorer,
   framework,
+  FrameworkSettings,
   navBar,
   notification,
   presentation,
@@ -60,7 +59,6 @@ import {
   savedBotUrls,
   theme,
   update,
-  users,
   windowState,
   ChatState,
   DialogState,
@@ -71,9 +69,15 @@ import {
   PresentationState,
   ProgressIndicatorState,
   ResourcesState,
+  Settings,
   ThemeState,
   UpdateState,
-} from './reducers';
+  ngrokTunnel,
+  NgrokTunnelState,
+} from '@bfemulator/app-shared';
+
+import { forwardToMain } from './middleware/forwardToMain';
+import { applicationSagas } from './sagas';
 
 export interface RootState {
   azureAuth?: AzureAuthState;
@@ -93,6 +97,7 @@ export interface RootState {
   settings?: Settings;
   theme?: ThemeState;
   update?: UpdateState;
+  ngrokTunnel?: NgrokTunnelState;
 }
 
 const DEFAULT_STATE = {};
@@ -103,7 +108,6 @@ function initStore(): Store<RootState> {
     framework,
     savedBotUrls,
     windowState,
-    users,
   });
 
   const sagaMiddleware = sagaMiddlewareFactory();
@@ -132,11 +136,29 @@ function initStore(): Store<RootState> {
       settings: settingsReducer,
       theme,
       update,
+      ngrokTunnel,
     }),
     DEFAULT_STATE,
     storeEnhancer
   );
-  applicationSagas.forEach(saga => sagaMiddleware.run(saga));
+
+  function* rootSaga() {
+    yield all(
+      applicationSagas.map(saga =>
+        spawn(function*() {
+          while (true) {
+            try {
+              yield call(saga);
+              break;
+            } catch (error) {
+              console.error('Saga error: ', error); // eslint-disable-line
+            }
+          }
+        })
+      )
+    );
+  }
+  sagaMiddleware.run(rootSaga);
 
   // sync the renderer process store with any updates on the main process
   ipcRenderer.on('sync-store', (_ev, action) => {

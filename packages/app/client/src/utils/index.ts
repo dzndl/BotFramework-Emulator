@@ -34,5 +34,7 @@
 export * from './debounce';
 export * from './expandFlatTree';
 export * from './getGlobal';
+export * from './getSettingsDelta';
 export * from './generateBotSecret';
 export * from './chatUtils';
+export * from './copyToClipboard';

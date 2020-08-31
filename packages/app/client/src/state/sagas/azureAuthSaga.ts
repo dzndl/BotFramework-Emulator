@@ -30,18 +30,19 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-import { SharedConstants } from '@bfemulator/app-shared';
+
+import {
+  azureArmTokenDataChanged,
+  AzureAuthAction,
+  AzureAuthState,
+  AzureAuthWorkflow,
+  SharedConstants,
+  AZURE_BEGIN_AUTH_WORKFLOW,
+} from '@bfemulator/app-shared';
 import { call, ForkEffect, put, select, takeEvery } from 'redux-saga/effects';
 import { CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
 
 import { DialogService } from '../../ui/dialogs';
-import {
-  AZURE_BEGIN_AUTH_WORKFLOW,
-  azureArmTokenDataChanged,
-  AzureAuthAction,
-  AzureAuthWorkflow,
-} from '../actions/azureAuthActions';
-import { AzureAuthState } from '../reducers/azureAuth';
 import { RootState } from '../store';
 
 const getArmTokenFromState = (state: RootState) => state.azureAuth;
@@ -73,10 +74,12 @@ export class AzureAuthSaga {
           PersistAzureLoginChanged,
           persistLogin
         );
-        AzureAuthSaga.commandService.remoteCall(TrackEvent, 'signIn_success').catch(_e => void 0);
+        AzureAuthSaga.commandService
+          .remoteCall(TrackEvent, 'azure_signIn', { persistLogin: !!persistLogin, success: true })
+          .catch(_e => void 0);
       } else {
         yield DialogService.showDialog(action.payload.loginFailedDialog);
-        AzureAuthSaga.commandService.remoteCall(TrackEvent, 'signIn_failure').catch(_e => void 0);
+        AzureAuthSaga.commandService.remoteCall(TrackEvent, 'azure_signIn', { success: false }).catch(_e => void 0);
       }
       yield put(azureArmTokenDataChanged(azureAuth.access_token));
       return azureAuth;

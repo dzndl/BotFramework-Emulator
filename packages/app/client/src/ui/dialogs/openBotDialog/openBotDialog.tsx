@@ -46,6 +46,8 @@ import * as React from 'react';
 import { ChangeEvent, Component, MouseEvent, ReactNode } from 'react';
 import { EmulatorMode } from '@bfemulator/sdk-shared';
 
+import * as dialogStyles from '../dialogStyles.scss';
+
 import * as openBotStyles from './openBotDialog.scss';
 
 export interface OpenBotDialogProps {
@@ -70,6 +72,8 @@ export interface OpenBotDialogState {
   appId?: string;
   appPassword?: string;
   isAzureGov?: boolean;
+  speechKey?: string;
+  speechRegion?: string;
 }
 
 enum ValidationResult {
@@ -121,12 +125,11 @@ export class OpenBotDialog extends Component<OpenBotDialogProps, OpenBotDialogSt
 
   public render(): ReactNode {
     const { savedBotUrls = [] } = this.props;
-    const { botUrl, appId, appPassword, mode, isDebug, isAzureGov } = this.state;
+    const { botUrl, appId, appPassword, mode, isDebug, isAzureGov, speechKey, speechRegion } = this.state;
     const validationResult = OpenBotDialog.validateEndpoint(botUrl);
     const errorMessage = OpenBotDialog.getErrorMessage(validationResult);
     const shouldBeDisabled =
       validationResult === ValidationResult.Invalid || validationResult === ValidationResult.Empty;
-    const botUrlLabel = 'Bot URL';
 
     return (
       <Dialog cancel={this.props.onDialogCancel} className={openBotStyles.themeOverrides} title="Open a bot">
@@ -135,10 +138,10 @@ export class OpenBotDialog extends Component<OpenBotDialogProps, OpenBotDialogSt
             <AutoComplete
               autoFocus={true}
               errorMessage={errorMessage}
-              label={botUrlLabel}
+              label={'Bot URL'}
               items={savedBotUrls.map(elem => elem.url).slice(0, 9)}
               onChange={this.onBotUrlChange}
-              placeholder={botUrlLabel}
+              placeholder={'Enter your bot URL'}
               value={this.state.botUrl}
             />
             {this.browseButton}
@@ -162,6 +165,27 @@ export class OpenBotDialog extends Component<OpenBotDialogProps, OpenBotDialogSt
               value={appPassword}
             />
           </Row>
+          {!isDebug && (
+            <Row className={openBotStyles.multiInputRow}>
+              <TextField
+                inputContainerClassName={openBotStyles.inputContainerRow}
+                name="speechRegion"
+                label="Direct Line Speech Region"
+                onChange={this.onInputChange}
+                placeholder="Optional"
+                value={speechRegion}
+              />
+              <TextField
+                inputContainerClassName={openBotStyles.inputContainerRow}
+                label="Direct Line Speech Key"
+                name="speechKey"
+                onChange={this.onInputChange}
+                placeholder="Optional"
+                type="password"
+                value={speechKey}
+              />
+            </Row>
+          )}
           <Row className={openBotStyles.rowOverride}>
             <Checkbox
               label="Open in debug mode"
@@ -177,8 +201,10 @@ export class OpenBotDialog extends Component<OpenBotDialogProps, OpenBotDialogSt
             />
             <LinkButton
               ariaLabel="Learn more about Azure for US Government"
+              className={dialogStyles.dialogLink}
               linkRole={true}
               onClick={this.onEmulatorAzureGovDocsClick}
+              type="button"
             >
               &nbsp;Learn more.
             </LinkButton>

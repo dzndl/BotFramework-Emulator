@@ -30,17 +30,22 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-import { FrameworkSettings, SharedConstants } from '@bfemulator/app-shared';
+
+import {
+  close as closeEditorDocument,
+  executeCommand,
+  saveFrameworkSettings,
+  setDirtyFlag,
+  FrameworkSettings,
+  SharedConstants,
+} from '@bfemulator/app-shared';
 import { connect } from 'react-redux';
 import { Action } from 'redux';
 
 import { DOCUMENT_ID_APP_SETTINGS } from '../../../constants';
-import * as EditorActions from '../../../state/actions/editorActions';
 import { getTabGroupForDocument } from '../../../state/helpers/editorHelpers';
 import { RootState } from '../../../state/store';
 import { debounce } from '../../../utils';
-import { saveFrameworkSettings } from '../../../state/actions/frameworkSettingsActions';
-import { executeCommand } from '../../../state/actions/commandActions';
 import { ariaAlertService } from '../../a11y';
 
 import { AppSettingsEditor, AppSettingsEditorProps } from './appSettingsEditor';
@@ -48,6 +53,8 @@ import { AppSettingsEditor, AppSettingsEditorProps } from './appSettingsEditor';
 const mapStateToProps = (state: RootState, ownProps: AppSettingsEditorProps) => ({
   ...ownProps,
   framework: state.framework,
+  ngrokLastPingInterval: state.ngrokTunnel.timeIntervalSinceLastPing,
+  ngrokTunnelStatus: state.ngrokTunnel.tunnelStatus,
 });
 
 const mapDispatchToProps = (dispatch: (action: Action) => void, ownProps: AppSettingsEditorProps) => ({
@@ -55,7 +62,7 @@ const mapDispatchToProps = (dispatch: (action: Action) => void, ownProps: AppSet
     ariaAlertService.alert(msg);
   },
   discardChanges: () =>
-    dispatch(EditorActions.close(getTabGroupForDocument(ownProps.documentId), DOCUMENT_ID_APP_SETTINGS)),
+    dispatch(closeEditorDocument(getTabGroupForDocument(ownProps.documentId), DOCUMENT_ID_APP_SETTINGS)),
   onAnchorClick: (url: string) => {
     dispatch(executeCommand(true, SharedConstants.Commands.Electron.OpenExternal, null, url));
   },
@@ -69,8 +76,10 @@ const mapDispatchToProps = (dispatch: (action: Action) => void, ownProps: AppSet
       dispatch(executeCommand(true, SharedConstants.Commands.Electron.ShowOpenDialog, resolve, dialogOptions));
     });
   },
+  onOpenNgrokStatusViewerClick: () =>
+    dispatch(executeCommand(true, SharedConstants.Commands.Ngrok.OpenStatusViewer, null)),
   saveFrameworkSettings: (framework: FrameworkSettings) => dispatch(saveFrameworkSettings(framework)),
-  setDirtyFlag: debounce((dirty: boolean) => dispatch(EditorActions.setDirtyFlag(ownProps.documentId, dirty)), 300),
+  setDirtyFlag: debounce((dirty: boolean) => dispatch(setDirtyFlag(ownProps.documentId, dirty)), 300),
 });
 
 export const AppSettingsEditorContainer = connect(mapStateToProps, mapDispatchToProps)(AppSettingsEditor);

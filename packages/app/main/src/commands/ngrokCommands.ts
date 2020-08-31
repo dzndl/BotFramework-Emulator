@@ -31,16 +31,17 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-import { SharedConstants } from '@bfemulator/app-shared';
+import { open as openInEditor, SharedConstants } from '@bfemulator/app-shared';
 import { Command } from '@bfemulator/sdk-shared';
 
+import { store } from '../state/store';
 import { Emulator } from '../emulator';
+import { TelemetryService } from '../telemetry';
 
 const Commands = SharedConstants.Commands.Ngrok;
 
 /** Registers ngrok commands */
 export class NgrokCommands {
-  // ---------------------------------------------------------------------------
   // Attempts to reconnect to a new ngrok tunnel
   @Command(Commands.Reconnect)
   protected async reconnectToNgrok(): Promise<any> {
@@ -48,6 +49,7 @@ export class NgrokCommands {
     try {
       await emulator.ngrok.recycle();
       emulator.ngrok.broadcastNgrokReconnected();
+      TelemetryService.trackEvent('ngrok_reconnect');
     } catch (e) {
       throw new Error(`There was an error while trying to reconnect ngrok: ${e}`);
     }
@@ -56,5 +58,24 @@ export class NgrokCommands {
   @Command(Commands.KillProcess)
   protected killNgrokProcess() {
     Emulator.getInstance().ngrok.kill();
+  }
+
+  @Command(Commands.PingTunnel)
+  protected pingForStatusOfTunnel() {
+    Emulator.getInstance().ngrok.pingTunnel();
+  }
+
+  @Command(Commands.OpenStatusViewer)
+  protected openStatusViewer(makeActiveByDefault: boolean = true) {
+    store.dispatch(
+      openInEditor({
+        contentType: SharedConstants.ContentTypes.CONTENT_TYPE_NGROK_DEBUGGER,
+        documentId: SharedConstants.DocumentIds.DOCUMENT_ID_NGROK_DEBUGGER,
+        isGlobal: true,
+        meta: {
+          makeActiveByDefault,
+        },
+      })
+    );
   }
 }

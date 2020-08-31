@@ -30,14 +30,20 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-import { ClientAwareSettings, FrameworkSettings, SharedConstants } from '@bfemulator/app-shared';
+
+import {
+  ADD_SAVED_BOT_URL,
+  REMEMBER_THEME,
+  ClientAwareSettings,
+  FrameworkAction,
+  FrameworkActionType,
+  FrameworkSettings,
+  SharedConstants,
+} from '@bfemulator/app-shared';
 import { call, ForkEffect, select, takeEvery } from 'redux-saga/effects';
 import { app } from 'electron';
 import { CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
 
-import { FrameworkAction, FrameworkActionType } from '../actions/frameworkSettingsActions';
-import { REMEMBER_THEME } from '../actions/windowStateActions';
-import { ADD_SAVED_BOT_URL } from '../actions/savedBotUrlsActions';
 import { RootState } from '../store';
 import { Emulator } from '../../emulator';
 
@@ -62,7 +68,7 @@ export class SettingsSagas {
   public static *setFramework(action: FrameworkAction<FrameworkSettings>): IterableIterator<any> {
     const emulator = Emulator.getInstance();
     yield emulator.ngrok.updateNgrokFromSettings(action.payload);
-    //emulator.framework.server.botEmulator.facilities.locale = action.payload.locale;
+    emulator.server.state.locale = action.payload.locale;
     yield* SettingsSagas.pushClientAwareSettings();
   }
 
@@ -83,7 +89,6 @@ export class SettingsSagas {
         appPath: app.getAppPath(),
         serverUrl: (Emulator.getInstance().server.serverUrl || '').replace('[::]', 'localhost'),
         cwd: (process.cwd() || '').replace(/\\/g, '/'),
-        users: settingsState.users,
         locale: settingsState.framework.locale,
         savedBotUrls: settingsState.savedBotUrls,
       } as ClientAwareSettings

@@ -40,14 +40,16 @@ import { contactRemoved } from './handlers/contactRemoved';
 import { deleteUserData } from './handlers/deleteUserData';
 import { createGetConversationHandler } from './handlers/getConversation';
 import { getUsers } from './handlers/getUsers';
-import { paymentComplete } from './handlers/paymentComplete';
 import { ping } from './handlers/ping';
 import { removeUsers } from './handlers/removeUsers';
 import { sendTokenResponse } from './handlers/sendTokenResponse';
 import { sendTyping } from './handlers/sendTyping';
-import { updateShippingAddress } from './handlers/updateShippingAddress';
-import { updateShippingOption } from './handlers/updateShippingOption';
 import { createGetConversationEndpointHandler } from './handlers/getConversationEndpoint';
+import { createUpdateConversationHandler } from './handlers/updateConversation';
+import { createInitialReportHandler } from './handlers/initialReport';
+import { createFeedActivitiesAsTranscriptHandler } from './handlers/feedActivitiesAsTranscript';
+import { getWebSocketPort } from './handlers/getWebSocketPort';
+import { createTrackActivityHandler } from './handlers/trackActivity';
 
 export function mountEmulatorRoutes(emulatorServer: EmulatorRestServer) {
   const { server, state } = emulatorServer;
@@ -72,27 +74,23 @@ export function mountEmulatorRoutes(emulatorServer: EmulatorRestServer) {
 
   server.del('/emulator/:conversationId/userdata', getConversation, deleteUserData);
 
-  server.post(
-    '/emulator/:conversationId/invoke/updateShippingAddress',
-    jsonBodyParser,
-    getConversation,
-    updateShippingAddress
-  );
-
-  server.post(
-    '/emulator/:conversationId/invoke/updateShippingOption',
-    jsonBodyParser,
-    getConversation,
-    updateShippingOption
-  );
-
-  server.post('/emulator/:conversationId/invoke/paymentComplete', jsonBodyParser, getConversation, paymentComplete);
-
   server.post('/emulator/:conversationId/invoke/sendTokenResponse', jsonBodyParser, sendTokenResponse);
 
-  server.get('/emulator/users', (req, res, next) => {
-    res.send(200, state.users);
-    res.end();
-    next();
-  });
+  server.put('/emulator/:conversationId', jsonBodyParser, createUpdateConversationHandler(state));
+
+  server.post(
+    '/emulator/:conversationId/invoke/initialReport',
+    jsonBodyParser,
+    createInitialReportHandler(emulatorServer)
+  );
+
+  server.post(
+    '/emulator/:conversationId/transcript',
+    jsonBodyParser,
+    createFeedActivitiesAsTranscriptHandler(emulatorServer)
+  );
+
+  server.get('/emulator/ws/port', getWebSocketPort);
+
+  server.post('/emulator/:conversationId/activity/track', jsonBodyParser, createTrackActivityHandler(state));
 }

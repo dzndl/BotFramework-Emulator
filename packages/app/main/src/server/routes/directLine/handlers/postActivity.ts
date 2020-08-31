@@ -40,6 +40,7 @@ import { Conversation } from '../../../state/conversation';
 import { sendErrorResponse } from '../../../utils/sendErrorResponse';
 import { statusCodeFamily } from '../../../utils/statusCodeFamily';
 import { EmulatorRestServer } from '../../../restServer';
+import { WebSocketServer } from '../../../webSocketServer';
 
 export function createPostActivityHandler(emulatorServer: EmulatorRestServer) {
   const { logMessage } = emulatorServer.logger;
@@ -56,18 +57,35 @@ export function createPostActivityHandler(emulatorServer: EmulatorRestServer) {
       return;
     }
 
-    const activity = req.body as Activity;
+    let activity = req.body as Activity;
 
     try {
-      const { activityId, response, statusCode } = await conversation.postActivityToBot(activity, true);
+      const { updatedActivity, response, statusCode } = await conversation.postActivityToBot(activity, true);
+      activity = updatedActivity;
 
       if (!statusCodeFamily(statusCode, 200)) {
         if (statusCode === HttpStatus.UNAUTHORIZED || statusCode === HttpStatus.FORBIDDEN) {
           logMessage(req.params.conversationId, textItem(LogLevel.Error, 'Cannot post activity. Unauthorized.'));
         }
-        res.send(statusCode || HttpStatus.INTERNAL_SERVER_ERROR, await response.text());
+        let err;
+        if (response.text) {
+          err = await response.text();
+        } else {
+          err = {
+            message: response.message,
+            status: response.status,
+          };
+        }
+        res.send(statusCode || HttpStatus.INTERNAL_SERVER_ERROR, err);
       } else {
-        res.send(statusCode, { id: activityId });
+        res.send(statusCode, { id: activity.id });
+
+        // (filter out the /INSPECT open command because it doesn't originate from Web Chat)
+        if (activity.type === 'message' && activity.text === '/INSPECT open') {
+          res.end();
+          return next();
+        }
+        WebSocketServer.sendToSubscribers(conversation.conversationId, activity);
       }
     } catch (err) {
       sendErrorResponse(req, res, next, err);

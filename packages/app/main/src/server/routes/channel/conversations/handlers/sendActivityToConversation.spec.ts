@@ -35,6 +35,18 @@ import * as HttpStatus from 'http-status-codes';
 
 import { sendActivityToConversation } from './sendActivityToConversation';
 
+const mockSocket = {
+  send: jest.fn(),
+};
+
+jest.mock('../../../../webSocketServer', () => {
+  return {
+    WebSocketServer: {
+      sendToSubscribers: (...args) => mockSocket.send(...args),
+    },
+  };
+});
+
 const mockSendErrorResponse = jest.fn();
 jest.mock('../../../../utils/sendErrorResponse', () => ({
   sendErrorResponse: (...args) => mockSendErrorResponse(...args),
@@ -49,7 +61,10 @@ describe('sendActivityToConversation handler', () => {
     const req: any = {
       body: {},
       conversation: {
-        postActivityToUser: jest.fn(() => 'post activity response'),
+        prepActivityToBeSentToUser: jest.fn(() => ({ id: 'activity1' })),
+        user: {
+          id: ' someUser',
+        },
       },
       params: {
         activityId: 'activity1',
@@ -62,7 +77,7 @@ describe('sendActivityToConversation handler', () => {
     const next = jest.fn();
     sendActivityToConversation(req, res, next);
 
-    expect(res.send).toHaveBeenCalledWith(HttpStatus.OK, 'post activity response');
+    expect(res.send).toHaveBeenCalledWith(HttpStatus.OK, { id: 'activity1' });
     expect(res.end).toHaveBeenCalled();
     expect(next).toHaveBeenCalled();
   });
@@ -71,9 +86,12 @@ describe('sendActivityToConversation handler', () => {
     const req: any = {
       body: {},
       conversation: {
-        postActivityToUser: jest.fn(() => {
+        prepActivityToBeSentToUser: jest.fn(() => {
           throw new Error('Something went wrong.');
         }),
+        user: {
+          id: ' someUser',
+        },
       },
       params: {
         activityId: 'activity1',

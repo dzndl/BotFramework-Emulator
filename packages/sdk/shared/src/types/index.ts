@@ -37,13 +37,13 @@ export * from './attachment';
 export * from './card';
 export * from './ipc';
 export * from './log';
-export * from './payment';
 export * from './response';
 
 export * from './apiException';
 export * from './botConfigWithPath';
 export * from './botData';
 export * from './botEndpointOptions';
+export * from './channelService';
 export * from './entity';
 export * from './error';
 export * from './errorCodes';

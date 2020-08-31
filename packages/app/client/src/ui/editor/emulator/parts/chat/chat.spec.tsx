@@ -36,24 +36,34 @@ import { mount, ReactWrapper, shallow, ShallowWrapper } from 'enzyme';
 import { Provider } from 'react-redux';
 import ReactWebChat, { createDirectLine, createStyleSet } from 'botframework-webchat';
 import { ActivityTypes } from 'botframework-schema';
-import { ValueTypes } from '@bfemulator/app-shared';
-import { combineReducers, createStore } from 'redux';
-import { CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
-
-import { bot } from '../../../../../state/reducers/bot';
-import { chat } from '../../../../../state/reducers/chat';
-import { editor } from '../../../../../state/reducers/editor';
-import { clientAwareSettings } from '../../../../../state/reducers/clientAwareSettings';
-import { BotCommands } from '../../../../../commands/botCommands';
 import {
+  bot,
+  chat,
+  clientAwareSettings,
+  editor,
   setInspectorObjects,
   showContextMenuForActivity,
   setHighlightedObjects,
-} from '../../../../../state/actions/chatActions';
+  ValueTypes,
+  RestartConversationStatus,
+} from '@bfemulator/app-shared';
+import { combineReducers, createStore } from 'redux';
+import { CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
+
+import { BotCommands } from '../../../../../commands/botCommands';
 
 import webChatStyleOptions from './webChatTheme';
 import { ChatContainer } from './chatContainer';
 import { ChatProps, Chat } from './chat';
+
+jest.mock('./chat.scss', () => ({
+  get bubbleContentColor() {
+    return '#fff';
+  },
+  get bubbleBackground() {
+    return '#ff0000';
+  },
+}));
 
 jest.mock('electron', () => ({
   ipcMain: new Proxy(
@@ -89,6 +99,7 @@ const defaultDocument = {
   inspectorObjects: [],
   botId: '456',
   mode: 'livechat',
+  userId: 'user1',
 };
 
 const mockStore = createStore(combineReducers({ bot, chat, clientAwareSettings, editor }), {
@@ -96,16 +107,10 @@ const mockStore = createStore(combineReducers({ bot, chat, clientAwareSettings, 
     chats: {
       doc1: defaultDocument,
     },
+    restartStatus: {},
     pendingSpeechTokenRetrieval: false,
     webChatStores: {},
     webSpeechFactories: {},
-  },
-  clientAwareSettings: {
-    currentUser: { id: '123', name: 'Current User' },
-    users: {
-      currentUserId: '123',
-      usersById: { '123': { id: '123', name: 'Current User' } },
-    },
   },
   directLine: {},
 });
@@ -118,7 +123,6 @@ jest.mock('../../../../../state/store', () => ({
 
 describe('<ChatContainer />', () => {
   let wrapper: ReactWrapper<any, any, Chat> | ShallowWrapper<any, any, Chat>;
-  let instance: Chat;
 
   let commandService: CommandServiceImpl;
   beforeAll(() => {
@@ -128,20 +132,85 @@ describe('<ChatContainer />', () => {
     commandService = descriptor.descriptor.get();
   });
 
+  let props;
+
   beforeEach(() => {
-    const props = {
+    props = {
       documentId: 'doc1',
       endpoint: {},
       mode: 'livechat',
       onStartConversation: jest.fn(),
       locale: 'en-US',
       selectedActivity: {},
+      restartStatus: undefined,
     } as ChatProps;
     wrapper = mount(
       <Provider store={mockStore}>
         <ChatContainer {...props} />
       </Provider>
     );
+  });
+
+  it('should disable webchat if chat window is in restart conversation flow', () => {
+    let updatedProps = {
+      ...props,
+      restartStatus: RestartConversationStatus.Started,
+    };
+
+    wrapper.setProps({
+      children: <ChatContainer {...updatedProps} />,
+    });
+    expect(wrapper.find(ReactWebChat).props().disabled).toBeTruthy();
+
+    updatedProps = {
+      ...props,
+      restartStatus: RestartConversationStatus.Rejected,
+    };
+
+    wrapper.setProps({
+      children: <ChatContainer {...updatedProps} />,
+    });
+    expect(wrapper.find(ReactWebChat).props().disabled).toBeFalsy();
+
+    updatedProps = {
+      ...props,
+      restartStatus: RestartConversationStatus.Completed,
+    };
+
+    wrapper.setProps({
+      children: <ChatContainer {...updatedProps} />,
+    });
+    expect(wrapper.find(ReactWebChat).props().disabled).toBeFalsy();
+
+    updatedProps = {
+      ...props,
+      restartStatus: undefined,
+    };
+
+    wrapper.setProps({
+      children: <ChatContainer {...updatedProps} />,
+    });
+    expect(wrapper.find(ReactWebChat).props().disabled).toBeFalsy();
+
+    updatedProps = {
+      ...props,
+      restartStatus: RestartConversationStatus.Stop,
+    };
+
+    wrapper.setProps({
+      children: <ChatContainer {...updatedProps} />,
+    });
+    expect(wrapper.find(ReactWebChat).props().disabled).toBeFalsy();
+
+    updatedProps = {
+      ...props,
+      restartStatus: RestartConversationStatus.Started,
+    };
+
+    wrapper.setProps({
+      children: <ChatContainer {...updatedProps} />,
+    });
+    expect(wrapper.find(ReactWebChat).props().disabled).toBeTruthy();
   });
 
   describe('when there is no direct line client', () => {
@@ -153,31 +222,27 @@ describe('<ChatContainer />', () => {
   });
 
   describe('when there is a direct line client', () => {
-    it('renders a connecting message', () => {
-      wrapper = shallow(<Chat pendingSpeechTokenRetrieval={true} />);
-
-      expect(wrapper.text()).toEqual('Connecting...');
-    });
-
-    it('renders the WebChat component with correct props', () => {
+    it('renders the WebChat component', () => {
       const webChat = wrapper.find(ReactWebChat);
       const styleSet = createStyleSet({ ...webChatStyleOptions });
 
-      styleSet.uploadButton = {
-        ...styleSet.uploadButton,
-        padding: '1px',
+      styleSet.fileContent = {
+        ...styleSet.fileContent,
+        background: '#ff0000',
+        '& .webchat__fileContent__badge': { padding: '4px' },
+        '& .webchat__fileContent__downloadIcon': { fill: '#fff' },
+        '& .webchat__fileContent__fileName': { color: '#fff' },
+        '& .webchat__fileContent__size': { color: '#fff' },
       };
 
       expect(webChat.exists()).toBe(true);
-      expect(webChat.props()).toMatchObject({
-        activityMiddleware: expect.any(Function),
-        bot: { id: defaultDocument.botId, name: 'Bot' },
-        directLine: defaultDocument.directLine,
-        locale: 'en-US',
-        styleSet: styleSet,
-        userID: '123',
-        username: 'Current User',
-      });
+      const wcProps = webChat.props();
+      expect(wcProps.bot).toEqual({ id: defaultDocument.botId, name: 'Bot' });
+      expect(wcProps.directLine).toEqual(defaultDocument.directLine);
+      expect(wcProps.locale).toBe('en-US');
+      expect(wcProps.styleSet).toEqual(styleSet);
+      expect(wcProps.userID).toBe('user1');
+      expect(wcProps.username).toBe('User');
     });
   });
 

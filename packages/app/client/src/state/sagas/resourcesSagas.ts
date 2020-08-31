@@ -30,7 +30,21 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-import { BotInfo, isChatFile, isTranscriptFile, NotificationType, SharedConstants } from '@bfemulator/app-shared';
+import {
+  beginAdd,
+  editResource,
+  isChatFile,
+  isTranscriptFile,
+  openTranscript,
+  BotInfo,
+  NotificationType,
+  ResourcesAction,
+  SharedConstants,
+  OPEN_CONTEXT_MENU_FOR_RESOURCE,
+  OPEN_RESOURCE,
+  OPEN_RESOURCE_SETTINGS,
+  RENAME_RESOURCE,
+} from '@bfemulator/app-shared';
 import { newNotification } from '@bfemulator/app-shared/built';
 import { IFileService } from 'botframework-config/lib/schema';
 import { ComponentClass } from 'react';
@@ -38,15 +52,6 @@ import { ForkEffect, put, takeEvery } from 'redux-saga/effects';
 import { CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
 
 import { DialogService } from '../../ui/dialogs/service';
-import { beginAdd } from '../actions/notificationActions';
-import {
-  editResource,
-  OPEN_CONTEXT_MENU_FOR_RESOURCE,
-  OPEN_RESOURCE,
-  OPEN_RESOURCE_SETTINGS,
-  RENAME_RESOURCE,
-  ResourcesAction,
-} from '../actions/resourcesActions';
 
 export class ResourcesSagas {
   @CommandServiceInstance()
@@ -119,20 +124,11 @@ export class ResourcesSagas {
   }
 
   public static *doOpenResource(action: ResourcesAction<IFileService>): IterableIterator<any> {
-    const { OpenChatFile, OpenTranscript } = SharedConstants.Commands.Emulator;
-    const { TrackEvent } = SharedConstants.Commands.Telemetry;
-    const { path, name } = action.payload;
-    if (isChatFile(path)) {
-      yield ResourcesSagas.commandService.call(OpenChatFile, path, true);
-      ResourcesSagas.commandService.remoteCall(TrackEvent, 'chatFile_open').catch(_e => void 0);
-    } else if (isTranscriptFile(path)) {
-      yield ResourcesSagas.commandService.call(OpenTranscript, path, name);
-      ResourcesSagas.commandService
-        .remoteCall(TrackEvent, 'transcriptFile_open', {
-          method: 'resources_pane',
-        })
-        .catch();
+    const { path } = action.payload;
+    if (isChatFile(path) || isTranscriptFile(path)) {
+      yield put(openTranscript(path));
     }
+
     // unknown types just fall into the abyss
   }
 

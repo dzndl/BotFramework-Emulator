@@ -31,23 +31,22 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-import { newNotification, SharedConstants } from '@bfemulator/app-shared';
+import {
+  beginAdd,
+  botHashGenerated,
+  open as openEditorDocument,
+  openBotViaFilePathAction,
+  newNotification,
+  BotAction,
+  BotActionType,
+  SharedConstants,
+} from '@bfemulator/app-shared';
 import { BotConfigWithPath, ConversationService } from '@bfemulator/sdk-shared';
 import { call, put, takeEvery, takeLatest } from 'redux-saga/effects';
 import { CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
 
 import { ActiveBotHelper } from '../../ui/helpers/activeBotHelper';
-import {
-  BotAction,
-  BotActionType,
-  botHashGenerated,
-  openBotViaFilePathAction,
-  openBotViaUrlAction,
-  restartConversation,
-} from '../actions/botActions';
-import { beginAdd } from '../actions/notificationActions';
 import { generateHash } from '../helpers/botHelpers';
-import * as ChatActions from '../actions/chatActions';
 
 import { botSagas, BotSagas } from './botSagas';
 import { SharedSagas } from './sharedSagas';
@@ -134,12 +133,9 @@ describe('The botSagas', () => {
     const gen = botSagas();
 
     expect(gen.next().value).toEqual(takeEvery(BotActionType.browse, BotSagas.browseForBot));
-
     expect(gen.next().value).toEqual(takeEvery(BotActionType.openViaUrl, BotSagas.openBotViaUrl));
     expect(gen.next().value).toEqual(takeEvery(BotActionType.openViaFilePath, BotSagas.openBotViaFilePath));
-    expect(gen.next().value).toEqual(takeEvery(BotActionType.restartConversation, BotSagas.restartConversation));
     expect(gen.next().value).toEqual(takeEvery(BotActionType.setActive, BotSagas.generateHashForActiveBot));
-
     expect(gen.next().value).toEqual(
       takeLatest(
         [BotActionType.setActive, BotActionType.load, BotActionType.close],
@@ -182,249 +178,6 @@ describe('The botSagas', () => {
     expect(gen.next().done).toBe(true);
   });
 
-  it('should restart a conversation', async () => {
-    const gen = BotSagas.restartConversation(restartConversation('1234', '4321'));
-    gen.next();
-    // select serverUrl
-    const response = gen.next('www.serverurl.com');
-    // fetch mock endpoint
-    const json = await gen.next(response.value).value;
-    expect(json).toEqual({ id: "Hi! I'm in ur json" });
-
-    // ChatDocument selector
-    const documentSelector = gen.next(json).value;
-    expect(documentSelector).toEqual({
-      '@@redux-saga/IO': true,
-      SELECT: {
-        args: [],
-        selector: jasmine.any(Function),
-      },
-    });
-
-    const mockDirectLine = { end: jest.fn() };
-    const mockChatDocument = {
-      directLine: mockDirectLine,
-    };
-    const clearLogPutter = gen.next(mockChatDocument).value;
-    expect(mockDirectLine.end).toHaveBeenCalled();
-    expect(mockChatDocument.directLine).toBeNull();
-    expect(clearLogPutter).toEqual(put(ChatActions.clearLog(jasmine.any(String) as any, jasmine.any(Function))));
-
-    const promise = gen.next().value;
-    expect(promise instanceof Promise).toBeTruthy();
-
-    const setInspectorObjectsPutter = gen.next().value;
-
-    expect(setInspectorObjectsPutter).toEqual(put(ChatActions.setInspectorObjects(jasmine.any(String) as any, [])));
-  });
-
-  it('should open a bot from a url', () => {
-    const gen = BotSagas.openBotViaUrl(
-      openBotViaUrlAction({
-        appPassword: 'password',
-        appId: '1234abcd',
-        endpoint: 'http://localhost/api/messages',
-      })
-    );
-    gen.next();
-    // select serverUrl
-    gen.next('www.serverurl.com');
-    // select custom user id
-    gen.next('');
-    // select users
-    const users = { currentUserId: 'user1', usersById: { user1: {} } };
-    gen.next(users);
-    // startConversation
-    const callToSaveUrl = gen.next({ ok: true, json: async () => null });
-    expect(callToSaveUrl.value).toEqual(
-      call(
-        [commandService, commandService.remoteCall],
-        SharedConstants.Commands.Settings.SaveBotUrl,
-        'http://localhost/api/messages'
-      )
-    );
-    // the saga should be finished
-    expect(gen.next().done).toBe(true);
-  });
-
-  it('should open a bot from a url with the custom user id', () => {
-    const gen = BotSagas.openBotViaUrl(
-      openBotViaUrlAction({
-        appPassword: 'password',
-        appId: '1234abcd',
-        endpoint: 'http://localhost/api/messages',
-      })
-    );
-    gen.next();
-    // select serverUrl
-    gen.next('www.serverurl.com');
-    // select custom user id
-    gen.next('customUserId');
-    // select users
-    const users = { currentUserId: 'user1', usersById: { user1: {} } };
-    const callToSetCurrentUser = gen.next(users).value;
-    expect(callToSetCurrentUser).toEqual(
-      call(
-        [commandService, commandService.remoteCall],
-        SharedConstants.Commands.Emulator.SetCurrentUser,
-        'customUserId'
-      )
-    );
-    // call to set current user
-    gen.next();
-    // startConversation
-    const callToSaveUrl = gen.next({ ok: true, json: async () => null });
-    expect(callToSaveUrl.value).toEqual(
-      call(
-        [commandService, commandService.remoteCall],
-        SharedConstants.Commands.Settings.SaveBotUrl,
-        'http://localhost/api/messages'
-      )
-    );
-    // the saga should be finished
-    expect(gen.next().done).toBe(true);
-  });
-
-  it('should send a notification if opening a bot from a URL fails', () => {
-    const gen = BotSagas.openBotViaUrl(
-      openBotViaUrlAction({
-        appPassword: 'password',
-        appId: '1234abcd',
-        endpoint: 'http://localhost/api/messages',
-      })
-    );
-    gen.next();
-    // select serverUrl
-    gen.next('www.serverurl.com');
-    // select custom user id
-    gen.next('');
-    // select users
-    const users = { currentUserId: 'user1', usersById: { user1: {} } };
-    gen.next(users);
-    const errorNotification = beginAdd(
-      newNotification('An Error occurred opening the bot at http://localhost/api/messages: oh noes!')
-    );
-    (errorNotification as any).payload.notification.timestamp = jasmine.any(Number);
-    (errorNotification as any).payload.notification.id = jasmine.any(String);
-    expect(
-      gen.next({
-        statusText: 'oh noes!',
-        ok: false,
-      }).value
-    ).toEqual(put(errorNotification));
-  });
-
-  it('should send the "/INSPECT open" command when in debug mode and opening from url', () => {
-    const gen = BotSagas.openBotViaUrl(
-      openBotViaUrlAction({
-        appPassword: 'password',
-        appId: '1234abcd',
-        endpoint: 'http://localhost/api/messages',
-        mode: 'debug',
-      })
-    );
-    gen.next();
-    // select serverUrl
-    gen.next('www.serverurl.com');
-    // select custom user id
-    gen.next('');
-    // select users
-    const users = { currentUserId: 'user1', usersById: { user1: {} } };
-    gen.next(users);
-    // startConversation
-    gen.next({ ok: true, json: async () => null });
-    // response.json from starting conversation
-    const callToPostActivity = gen.next({ id: 'someConversationId' }).value;
-    // posting activity to conversation
-    const activity = {
-      type: 'message',
-      text: '/INSPECT open',
-    };
-    expect(callToPostActivity).toEqual(
-      call(
-        [commandService, commandService.remoteCall],
-        SharedConstants.Commands.Emulator.PostActivityToConversation,
-        'someConversationId',
-        activity
-      )
-    );
-    // POSTing the activity to the conversation should return a 200
-    const callToRememberEndpoint = gen.next({ statusCode: 200 });
-    expect(callToRememberEndpoint.value).toEqual(
-      call(
-        [commandService, commandService.remoteCall],
-        SharedConstants.Commands.Settings.SaveBotUrl,
-        'http://localhost/api/messages'
-      )
-    );
-    // the saga should be finished
-    expect(gen.next().done).toBe(true);
-  });
-
-  it('should spawn a notification if posting the "/INSPECT open" command fails', () => {
-    const gen = BotSagas.openBotViaUrl(
-      openBotViaUrlAction({
-        appPassword: 'password',
-        appId: '1234abcd',
-        endpoint: 'http://localhost/api/messages',
-        mode: 'debug',
-      })
-    );
-    gen.next();
-    // select serverUrl
-    gen.next('www.serverurl.com');
-    // select custom user id
-    gen.next('');
-    // select users
-    const users = { currentUserId: 'user1', usersById: { user1: {} } };
-    gen.next(users);
-    // startConversation
-    gen.next({ ok: true, json: async () => null });
-    // response.json from starting conversation
-    gen.next({ id: 'someConversationId' });
-    // POSTing to the conversation should return a 400
-    const errorNotification = beginAdd(
-      newNotification(
-        'An error occurred while POSTing "/INSPECT open" command to conversation someConversationId: Bad request: Something went wrong :('
-      )
-    );
-    (errorNotification as any).payload.notification.timestamp = jasmine.any(Number);
-    (errorNotification as any).payload.notification.id = jasmine.any(String);
-    expect(
-      gen.next({ response: { status: 'Bad request', message: 'Something went wrong :(' }, statusCode: 400 }).value
-    ).toEqual(put(errorNotification));
-  });
-
-  it('should spawn a notification if parsing the conversation id from the response fails', () => {
-    const gen = BotSagas.openBotViaUrl(
-      openBotViaUrlAction({
-        appPassword: 'password',
-        appId: '1234abcd',
-        endpoint: 'http://localhost/api/messages',
-        mode: 'debug',
-      })
-    );
-    gen.next();
-    // select serverUrl
-    gen.next('www.serverurl.com');
-    // select custom user id
-    gen.next('');
-    // select users
-    const users = { currentUserId: 'user1', usersById: { user1: {} } };
-    gen.next(users);
-    // startConversation
-    gen.next({ ok: true, json: async () => null });
-    // response.json from starting conversation
-    const startConversationResponse = gen.next({ id: undefined }).value;
-    // POSTing to the conversation should return a 400
-    const errorNotification = beginAdd(
-      newNotification('An error occurred while trying to grab conversation ID from the new conversation.')
-    );
-    (errorNotification as any).payload.notification.timestamp = jasmine.any(Number);
-    (errorNotification as any).payload.notification.id = jasmine.any(String);
-    expect(startConversationResponse).toEqual(put(errorNotification));
-  });
-
   it('should open a bot from a file path', () => {
     const gen = BotSagas.openBotViaFilePath(openBotViaFilePathAction('/some/path.bot'));
 
@@ -445,5 +198,290 @@ describe('The botSagas', () => {
     (errorNotification as any).payload.notification.timestamp = jasmine.any(Number);
     (errorNotification as any).payload.notification.id = jasmine.any(String);
     expect(putNotification.value).toEqual(put(errorNotification));
+  });
+
+  it('should open a bot via url with the custom user ID', () => {
+    const mockAction: any = {
+      payload: {
+        endpoint: 'http://localhost:3978/api/messages',
+        channelService: 'public',
+        mode: 'livechat',
+        appId: 'someAppId',
+        appPassword: 'someAppPw',
+      },
+    };
+    const gen = BotSagas.openBotViaUrl(mockAction);
+    gen.next();
+    gen.next('userId'); // select custom user GUID
+
+    // select server url
+    expect(gen.next('http://localhost:52673').value).toEqual(
+      call([ConversationService, ConversationService.startConversation], 'http://localhost:52673', {
+        botUrl: mockAction.payload.endpoint,
+        channelServiceType: mockAction.payload.channelService,
+        members: [{ id: 'userId', name: 'User', role: 'user' }],
+        mode: mockAction.payload.mode,
+        msaAppId: mockAction.payload.appId,
+        msaPassword: mockAction.payload.appPassword,
+      })
+    );
+
+    const mockStartConvoResponse = {
+      json: async () => undefined,
+      ok: true,
+    };
+
+    // startConversation
+    gen.next(mockStartConvoResponse);
+    gen.next({
+      conversationId: 'someConvoId',
+      endpointId: 'someEndpointId',
+      members: [],
+    }); //res.json()
+
+    let next = gen.next(); // bootstrapChat()
+
+    const putOpenValue = next.value;
+    expect(putOpenValue).toEqual(
+      put(
+        openEditorDocument({
+          contentType: SharedConstants.ContentTypes.CONTENT_TYPE_LIVE_CHAT,
+          documentId: 'someConvoId',
+          isGlobal: false,
+        })
+      )
+    );
+    gen.next(); // put open()
+
+    gen.next({ ok: true }); // sendInitialLogReport()
+    next = gen.next({ ok: true }); // sendInitialActivity()
+
+    const callValue = next.value;
+    expect(callValue).toEqual(
+      call(
+        [commandService, commandService.remoteCall],
+        SharedConstants.Commands.Settings.SaveBotUrl,
+        'http://localhost:3978/api/messages'
+      )
+    );
+    expect(gen.next().done).toBe(true);
+  });
+
+  it('should open a bot via url with a newly generated user GUID', () => {
+    const mockAction: any = {
+      payload: {
+        endpoint: 'http://localhost:3978/api/messages',
+        channelService: 'public',
+        mode: 'livechat',
+        appId: 'someAppId',
+        appPassword: 'someAppPw',
+      },
+    };
+    const gen = BotSagas.openBotViaUrl(mockAction);
+    gen.next();
+    gen.next(''); // select custom user GUID (force generation of new GUID)
+
+    // select server url
+    const startConversationCall = gen.next('http://localhost:52673').value;
+    const startConversationPayload = startConversationCall.CALL.args[1];
+    expect(startConversationPayload.members[0].id.length).toBeGreaterThan(0);
+
+    const mockStartConvoResponse = {
+      json: async () => undefined,
+      ok: true,
+    };
+
+    // startConversation
+    gen.next(mockStartConvoResponse);
+    gen.next({
+      conversationId: 'someConvoId',
+      endpointId: 'someEndpointId',
+      members: [],
+    }); //res.json()
+
+    let next = gen.next(); // bootstrapChat()
+
+    const putOpenValue = next.value;
+    expect(putOpenValue).toEqual(
+      put(
+        openEditorDocument({
+          contentType: SharedConstants.ContentTypes.CONTENT_TYPE_LIVE_CHAT,
+          documentId: 'someConvoId',
+          isGlobal: false,
+        })
+      )
+    );
+    gen.next(); // put open()
+
+    gen.next({ ok: true }); // sendInitialLogReport()
+    next = gen.next({ ok: true }); // sendInitialActivity()
+
+    const callValue = next.value;
+    expect(callValue).toEqual(
+      call(
+        [commandService, commandService.remoteCall],
+        SharedConstants.Commands.Settings.SaveBotUrl,
+        'http://localhost:3978/api/messages'
+      )
+    );
+    expect(gen.next().done).toBe(true);
+  });
+
+  it('should throw if starting the conversation fails', () => {
+    const mockAction: any = {
+      payload: {
+        endpoint: 'http://localhost:3978/api/messages',
+        channelService: 'public',
+        mode: 'livechat',
+        appId: 'someAppId',
+        appPassword: 'someAppPw',
+      },
+    };
+    const gen = BotSagas.openBotViaUrl(mockAction);
+    gen.next();
+    gen.next('userId'); // select custom user GUID
+    gen.next('http://localhost:52673'); // select server url
+
+    const mockStartConvoResponse = {
+      json: async () => undefined,
+      ok: false,
+      status: 500,
+      statusText: 'INTERNAL SERVER ERROR',
+      text: async () => undefined,
+    };
+    gen.next(mockStartConvoResponse); // startConversation
+    try {
+      gen.next('Cannot read property "id" of undefined.');
+      expect(true).toBe(false); // ensure catch is hit
+    } catch (e) {
+      expect(e).toEqual({
+        description: '500 INTERNAL SERVER ERROR',
+        message: 'Error occurred while starting a new conversation',
+        innerMessage: 'Cannot read property "id" of undefined.',
+        status: 500,
+      });
+    }
+  });
+
+  it('should throw if sending the initial log report fails', () => {
+    const mockAction: any = {
+      payload: {
+        endpoint: 'http://localhost:3978/api/messages',
+        channelService: 'public',
+        mode: 'livechat',
+        appId: 'someAppId',
+        appPassword: 'someAppPw',
+      },
+    };
+    const gen = BotSagas.openBotViaUrl(mockAction);
+    gen.next();
+    gen.next('userId'); // select custom user GUID
+    gen.next('http://localhost:52673'); // select server url
+
+    const mockStartConvoResponse = {
+      json: async () => undefined,
+      ok: true,
+    };
+    gen.next(mockStartConvoResponse); // startConversation
+    gen.next({
+      conversationId: 'someConvoId',
+      endpointId: 'someEndpointId',
+      members: [],
+    }); //res.json()
+
+    const next = gen.next(); // bootstrapChat()
+
+    const putOpenValue = next.value;
+    expect(putOpenValue).toEqual(
+      put(
+        openEditorDocument({
+          contentType: SharedConstants.ContentTypes.CONTENT_TYPE_LIVE_CHAT,
+          documentId: 'someConvoId',
+          isGlobal: false,
+        })
+      )
+    );
+    gen.next(); // put open()
+
+    gen.next({
+      ok: false,
+      status: 500,
+      statusText: 'INTERNAL SERVER ERROR',
+      text: async () => undefined,
+    }); // sendInitialLogReport()
+
+    try {
+      gen.next('Could not read property "id" of undefined.');
+      expect(true).toBe(false); // ensure catch is hit
+    } catch (e) {
+      expect(e).toEqual({
+        description: '500 INTERNAL SERVER ERROR',
+        message: 'Error occurred while sending the initial log report',
+        innerMessage: 'Could not read property "id" of undefined.',
+        status: 500,
+      });
+    }
+  });
+
+  it('should throw if sending the initial activity fails', () => {
+    const mockAction: any = {
+      payload: {
+        endpoint: 'http://localhost:3978/api/messages',
+        channelService: 'public',
+        mode: 'livechat',
+        appId: 'someAppId',
+        appPassword: 'someAppPw',
+      },
+    };
+    const gen = BotSagas.openBotViaUrl(mockAction);
+    gen.next();
+    gen.next('userId'); // select custom user GUID
+    gen.next('http://localhost:52673'); // select server url
+
+    const mockStartConvoResponse = {
+      json: async () => undefined,
+      ok: true,
+    };
+    gen.next(mockStartConvoResponse); // startConversation
+    gen.next({
+      conversationId: 'someConvoId',
+      endpointId: 'someEndpointId',
+      members: [],
+    }); //res.json()
+
+    const next = gen.next(); // bootstrapChat()
+
+    const putOpenValue = next.value;
+    expect(putOpenValue).toEqual(
+      put(
+        openEditorDocument({
+          contentType: SharedConstants.ContentTypes.CONTENT_TYPE_LIVE_CHAT,
+          documentId: 'someConvoId',
+          isGlobal: false,
+        })
+      )
+    );
+    gen.next(); // put open()
+
+    gen.next({ ok: true }); // sendInitialLogReport()
+
+    gen.next({
+      ok: false,
+      status: 500,
+      statusText: 'INTERNAL SERVER ERROR',
+      text: async () => undefined,
+    }); // sendInitialActivity()
+
+    try {
+      gen.next('Could not read property "id" of undefined.');
+      expect(true).toBe(false); // ensure catch is hit
+    } catch (e) {
+      expect(e).toEqual({
+        description: '500 INTERNAL SERVER ERROR',
+        message: 'Error occurred while sending the initial activity',
+        innerMessage: 'Could not read property "id" of undefined.',
+        status: 500,
+      });
+    }
   });
 });

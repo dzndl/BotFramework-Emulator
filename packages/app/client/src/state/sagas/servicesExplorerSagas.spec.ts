@@ -30,7 +30,26 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-import { ServiceCodes, SharedConstants } from '@bfemulator/app-shared';
+
+import {
+  azureAuth,
+  azureArmTokenDataChanged,
+  bot,
+  launchConnectedServicePicker,
+  launchExternalLink,
+  load,
+  openAddServiceContextMenu,
+  openContextMenuForConnectedService,
+  openServiceDeepLink,
+  setActive,
+  sortExplorerContents,
+  ConnectedServiceAction,
+  ConnectedServicePayload,
+  ConnectedServicePickerPayload,
+  OpenAddServiceContextMenuPayload,
+  ServiceCodes,
+  SharedConstants,
+} from '@bfemulator/app-shared';
 import { ServiceTypes } from 'botframework-config/lib/schema';
 import { applyMiddleware, combineReducers, createStore } from 'redux';
 import sagaMiddlewareFactory from 'redux-saga';
@@ -47,22 +66,6 @@ import {
 import { DialogService } from '../../ui/dialogs/service'; // ☣☣ careful! ☣☣
 import { ConnectedServicePickerContainer } from '../../ui/shell/explorer/servicesExplorer';
 import { ConnectedServiceEditorContainer } from '../../ui/shell/explorer/servicesExplorer/connectedServiceEditor';
-import { azureArmTokenDataChanged } from '../actions/azureAuthActions';
-import { load, setActive } from '../actions/botActions';
-import {
-  ConnectedServiceAction,
-  ConnectedServicePayload,
-  ConnectedServicePickerPayload,
-  launchConnectedServicePicker,
-  openAddServiceContextMenu,
-  launchExternalLink,
-  openContextMenuForConnectedService,
-  openServiceDeepLink,
-  OpenAddServiceContextMenuPayload,
-} from '../actions/connectedServiceActions';
-import { azureAuth } from '../reducers/azureAuth';
-import { bot } from '../reducers/bot';
-import { sortExplorerContents } from '../actions/explorerActions';
 
 import { ServicesExplorerSagas, servicesExplorerSagas } from './servicesExplorerSagas';
 
@@ -464,7 +467,7 @@ describe('The ServiceExplorerSagas', () => {
       );
     });
 
-    it(' should open a QnA maker external link', () => {
+    it('should open a QnA maker external link', () => {
       const payload = {
         azureAuthWorkflowComponents: {
           loginFailedDialog: AzureLoginFailedDialogContainer,
@@ -488,6 +491,34 @@ describe('The ServiceExplorerSagas', () => {
           [commandService, commandService.remoteCall],
           SharedConstants.Commands.Electron.OpenExternal,
           'https://www.qnamaker.ai/'
+        )
+      );
+    });
+
+    it('should open a Cosmos DB external link', () => {
+      const payload = {
+        azureAuthWorkflowComponents: {
+          loginFailedDialog: AzureLoginFailedDialogContainer,
+          loginSuccessDialog: AzureLoginSuccessDialogContainer,
+          promptDialog: ConnectServicePromptDialogContainer,
+        },
+        getStartedDialog: GetStartedWithCSDialogContainer,
+        editorComponent: ConnectedServiceEditorContainer,
+        pickerComponent: ConnectedServicePickerContainer,
+        serviceType: ServiceTypes.CosmosDB,
+      };
+
+      action = launchExternalLink(payload as any);
+      sagaIt = ServicesExplorerSagas.launchExternalLink;
+
+      const it = sagaIt(action);
+      const result = it.next().value;
+
+      expect(result).toEqual(
+        call(
+          [commandService, commandService.remoteCall],
+          SharedConstants.Commands.Electron.OpenExternal,
+          'https://azure.microsoft.com/services/cosmos-db/'
         )
       );
     });

@@ -39,6 +39,8 @@ export const SharedConstants = {
   TEMP_BOT_IN_MEMORY_PATH: 'TEMP_BOT_IN_MEMORY',
   EDITOR_KEY_PRIMARY,
   EDITOR_KEY_SECONDARY,
+  EmulatedOAuthUrlProtocol: 'oauth:',
+  OAuthUrlProtocol: 'oauthlink:',
 
   /** Names of commands used in both main and client */
   Commands: {
@@ -88,31 +90,24 @@ export const SharedConstants = {
       DisplayContextMenu: 'electron:display-context-menu',
       OpenExternal: 'electron:open-external',
       ToggleDevTools: 'shell:toggle-inspector-devtools',
-      UpdateAvailable: 'shell:update-downloaded',
-      UpdateNotAvailable: 'shell:update-not-available',
-      ShowAboutDialog: 'shell:about',
       OpenFileLocation: 'shell:open-file-location',
       UnlinkFile: 'shell:unlink-file',
       RenameFile: 'shell:rename-file',
       QuitAndInstall: 'shell:quit-and-install',
+      CopyFile: 'shell:copy-file',
     },
 
     Emulator: {
       SaveTranscriptToFile: 'emulator:save-transcript-to-file',
-      FeedTranscriptFromDisk: 'emulator:feed-transcript:disk',
-      FeedTranscriptFromMemory: 'emulator:feed-transcript:deep-link',
+      ExtractActivitiesFromFile: 'emulator:extract-activities-from-file',
       GetServiceUrl: 'shell:get-service-url',
       GetSpeechToken: 'speech-token:get',
-      NewTranscript: 'transcript:new',
       NewLiveChat: 'livechat:new',
       OpenTranscript: 'transcript:open',
       PromptToOpenTranscript: 'transcript:prompt-open',
       ReloadTranscript: 'transcript:reload',
-      OpenChatFile: 'chat:open',
       AppendToLog: 'log:append',
-      SetCurrentUser: 'emulator:set-current-user',
       DeleteConversation: 'emulator:delete-conversation',
-      PostActivityToConversation: 'emulator:post-activity',
       StartEmulator: 'emulator:start',
       OpenProtocolUrls: 'emulator:openProtocolUrls',
       ClearState: 'emulator:clear-state',
@@ -150,6 +145,8 @@ export const SharedConstants = {
     Ngrok: {
       Reconnect: 'ngrok:reconnect',
       KillProcess: 'ngrok:killProcess',
+      PingTunnel: 'ngrok:pingTunnel',
+      OpenStatusViewer: 'ngrok:openStatusViewer',
     },
 
     Notifications: {
@@ -189,7 +186,6 @@ export const SharedConstants = {
       ShowUpdateAvailableDialog: 'update-available-dialog:show',
       ShowUpdateUnavailableDialog: 'update-unavailable-dialog:show',
       ShowProgressIndicator: 'progress-indicator:show',
-      OpenBotViaUrl: 'connect-bot',
       ShowOpenUrlDialog: 'chat:open-url',
       ShowDataCollectionDialog: 'data-collection:show',
     },
@@ -201,6 +197,7 @@ export const SharedConstants = {
     CONTENT_TYPE_APP_SETTINGS: 'application/vnd.microsoft.bfemulator.document.appsettings',
     CONTENT_TYPE_WELCOME_PAGE: 'application/vnd.microsoft.bfemulator.document.welcome',
     CONTENT_TYPE_TRANSCRIPT: 'application/vnd.microsoft.bfemulator.document.transcript',
+    CONTENT_TYPE_NGROK_DEBUGGER: 'application/vnd.microsoft.bfemulator.document.ngrokDebugger',
   },
   Channels: {
     ReadmeUrl: 'https://raw.githubusercontent.com/Microsoft/BotFramework-Emulator/master/content/CHANNELS.md',
@@ -211,6 +208,7 @@ export const SharedConstants = {
     DOCUMENT_ID_BOT_SETTINGS: 'bot:settings',
     DOCUMENT_ID_WELCOME_PAGE: 'welcome-page',
     DOCUMENT_ID_MARKDOWN_PAGE: 'markdown-page',
+    DOCUMENT_ID_NGROK_DEBUGGER: 'app:ngrokDebugger',
   },
   EditorKeys: [EDITOR_KEY_PRIMARY, EDITOR_KEY_SECONDARY],
   NavBarItems: {
@@ -218,5 +216,9 @@ export const SharedConstants = {
     NAVBAR_SETTINGS: 'navbar.settings',
     NAVBAR_NOTIFICATIONS: 'navbar.notifications',
     NAVBAR_RESOURCES: 'navbar:resources',
+  },
+  Activity: {
+    USER_ROLE: 'user',
+    BOT_ROLE: 'bot',
   },
 };

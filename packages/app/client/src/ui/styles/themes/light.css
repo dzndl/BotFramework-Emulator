@@ -24,6 +24,7 @@ html {
   --error-text: #A1260D;
   --error-bg: #F2DEDE;
   --error-outline: #BE1100;
+  --success-bg: #47B07F;
   --endpoint-warning: var(--neutral-14);
 
   /* webchat overridden colors */
@@ -36,14 +37,14 @@ html {
   --webchat-user-bubble-text: var(--neutral-1);
   --webchat-selected-activity-bg: #B89500;
   --webchat-selected-activity-text: var(--neutral-1);
-  --webchat-timestamp-text: var(--neutral-6);
+  --webchat-timestamp-text: var(--neutral-10);
   --webchat-scrollbar-color: var(--scrollbar-color);
 
   /* sendbox */
   --webchat-sendbox-bg: var(--neutral-1);
   --webchat-sendbox-text: initial;
-  --webchat-buttons-color: var(--neutral-6);
-  --webchat-buttons-color-focus: var(--neutral-9);
+  --webchat-buttons-color: var(--neutral-10);
+  --webchat-buttons-color-focus: var(--neutral-12);
   --webchat-buttons-dictate: #BE1100;
 
   /* transcript overlays */
@@ -54,7 +55,9 @@ html {
 
   /* suggested actions */
   --webchat-sa-bg: var(--webchat-bubble-bg);
-  --webchat-sa-border: none;
+  --webchat-sa-border-color: transparent;
+  --webchat-sa-border-style: solid;
+  --webchat-sa-border-width: 0;
   --webchat-sa-text: #3794FF;
 
   /* bot state button */
@@ -91,7 +94,7 @@ html {
   --input-bg: var(--neutral-1);
   --input-label-color: var(--neutral-14);
   --input-label-color-disabled: var(--neutral-10);
-  --input-border: 1px solid #C8C8C8;
+  --input-border: 1px solid var(--neutral-7);
   --input-border-focus: 2px solid #00BCF2;
   --input-border-error: 1px solid var(--error-outline);
   --input-placeholder-color: var(--neutral-9);
@@ -163,6 +166,7 @@ html {
   --explorer-panel-group-border: 1px solid transparent;
   --explorer-panel-empty-message-color: var(--neutral-15);
   --service-panescrollbar-color: var(--neutral-13);
+  --explorer-link-color: var(--dialog-link-color);
 
   /* Explorer Bar */
   --explorer-bar-header-bg: var(--neutral-3);
@@ -249,6 +253,7 @@ html {
 
   /* Inspector accessory buttons */
   --accessory-button-color: var(--s-button-color);
+  --accessory-button-icon-color: var(--link-color);
 
   /* Auto Complete */
   --auto-complete-results-opacity: 0.9;
@@ -288,4 +293,14 @@ html {
   --menu-item-hover-outline: none;
   --menu-separator-color: #2B2B2B;
   --menu-submenu-top-adjustment: -8px;
+
+  /* Ngrok Colors */
+  --ngrok-inactive: #007ACC;
+  --ngrok-active: #47B07F;
+  --ngrok-error: #BE1100;
+  --ngrok-error-outline: #F5B1B1;
+  --ngrok-text-color: #fff;
+
+  /* Webchat style overrides */
+  --bubble-text-color: #fff;
 }

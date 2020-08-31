@@ -31,11 +31,9 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-import { SharedConstants } from '@bfemulator/app-shared';
+import { removeDocPendingChange, EditorActions, SharedConstants } from '@bfemulator/app-shared';
 import { call, put, select, takeEvery, takeLatest } from 'redux-saga/effects';
 import { CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
-
-import { EditorActions, removeDocPendingChange } from '../actions/editorActions';
 
 import { editorSagas, EditorSagas } from './editorSagas';
 import { SharedSagas, editorSelector } from './sharedSagas';
@@ -143,12 +141,11 @@ describe('The Editor Sagas', () => {
 
     gen.next();
 
-    const { OpenChatFile } = SharedConstants.Commands.Emulator;
+    const { ReloadTranscript } = SharedConstants.Commands.Emulator;
 
     expect(mockLocalCommandsCalled).toHaveLength(1);
-    expect(mockLocalCommandsCalled[0].commandName).toEqual(OpenChatFile);
+    expect(mockLocalCommandsCalled[0].commandName).toEqual(ReloadTranscript);
     expect(mockLocalCommandsCalled[0].args[0]).toBe(mockChatFileName);
-    expect(mockLocalCommandsCalled[0].args[1]).toBe(true);
     expect(gen.next().done).toBe(true);
   });
 

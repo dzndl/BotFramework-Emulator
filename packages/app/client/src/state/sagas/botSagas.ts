@@ -31,32 +31,42 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-import { newNotification, ResourceResponse, SharedConstants, UserSettings } from '@bfemulator/app-shared';
-import { IEndpointService } from 'botframework-config';
+import {
+  beginAdd,
+  botHashGenerated,
+  newNotification,
+  open as openEditorDocument,
+  BotAction,
+  BotActionType,
+  BotConfigWithPathPayload,
+  SharedConstants,
+} from '@bfemulator/app-shared';
 import {
   CommandServiceImpl,
   CommandServiceInstance,
   ConversationService,
   StartConversationParams,
+  uniqueIdv4,
+  User,
+  isLocalHostUrl,
 } from '@bfemulator/sdk-shared';
 import { call, ForkEffect, put, select, takeEvery, takeLatest } from 'redux-saga/effects';
 
 import { ActiveBotHelper } from '../../ui/helpers/activeBotHelper';
-import {
-  BotAction,
-  BotActionType,
-  BotConfigWithPathPayload,
-  botHashGenerated,
-  openBotViaUrlAction,
-  RestartConversationPayload,
-} from '../actions/botActions';
-import { beginAdd } from '../actions/notificationActions';
 import { generateHash } from '../helpers/botHelpers';
 import { RootState } from '../store';
-import * as ChatActions from '../actions/chatActions';
-import { ChatDocument } from '../reducers/chat';
+import { throwErrorFromResponse } from '../utils/throwErrorFromResponse';
 
 import { SharedSagas } from './sharedSagas';
+import { ChatSagas } from './chatSagas';
+
+const getServerUrl = (state: RootState): string => {
+  return state.clientAwareSettings.serverUrl;
+};
+
+const getCustomUserGUID = (state: RootState): string => {
+  return state.framework.userGUID;
+};
 
 export class BotSagas {
   @CommandServiceInstance()
@@ -83,132 +93,95 @@ export class BotSagas {
     }
   }
 
-  // Currently restarts a conversation with an unchanged ID
-  public static *restartConversation(action: BotAction<RestartConversationPayload>): IterableIterator<any> {
-    const serverUrl = yield select((state: RootState) => state.clientAwareSettings.serverUrl);
-    const { documentId, conversationId, user } = action.payload;
-    let error;
-    try {
-      const endpointResponse: Response = yield ConversationService.getConversationEndpoint(serverUrl, conversationId);
-      if (!endpointResponse.ok) {
-        const error = yield endpointResponse.json();
-        throw new Error(error.error.message);
+  public static *openBotViaUrl(
+    action: BotAction<StartConversationParams & { isFromBotFile?: boolean }>
+  ): IterableIterator<any> {
+    const customUserId = yield select(getCustomUserGUID);
+    const user = {
+      id: customUserId || uniqueIdv4(), // use custom id or generate new one
+      name: 'User',
+      role: 'user',
+    };
+    const serverUrl = yield select(getServerUrl);
+    const payload = {
+      botUrl: action.payload.endpoint,
+      channelServiceType: action.payload.channelService,
+      members: [user],
+      mode: action.payload.mode,
+      msaAppId: action.payload.appId,
+      msaPassword: action.payload.appPassword,
+    };
+    let res: Response = yield call([ConversationService, ConversationService.startConversation], serverUrl, payload);
+    if (!res.ok) {
+      yield* throwErrorFromResponse('Error occurred while starting a new conversation', res);
+    }
+    const {
+      conversationId,
+      endpointId,
+      members,
+    }: { conversationId: string; endpointId: string; members: User[] } = yield res.json();
+    const documentId = `${conversationId}`;
+
+    // trigger chat saga that will populate the chat object in the store
+    yield ChatSagas.bootstrapChat({
+      conversationId,
+      documentId,
+      endpointId,
+      mode: action.payload.mode,
+      msaAppId: action.payload.appId,
+      msaPassword: action.payload.appPassword,
+      speechKey: action.payload.speechKey,
+      speechRegion: action.payload.speechRegion,
+      user,
+    });
+
+    // add a document to the store so the livechat tab is rendered
+    const { CONTENT_TYPE_DEBUG, CONTENT_TYPE_LIVE_CHAT } = SharedConstants.ContentTypes;
+    yield put(
+      openEditorDocument({
+        contentType: action.payload.mode === 'debug' ? CONTENT_TYPE_DEBUG : CONTENT_TYPE_LIVE_CHAT,
+        documentId,
+        isGlobal: false,
+      })
+    );
+
+    // call emulator to report proper status to chat panel (listening / ngrok)
+    res = yield ConversationService.sendInitialLogReport(serverUrl, conversationId, action.payload.endpoint);
+    if (!res.ok) {
+      yield* throwErrorFromResponse('Error occurred while sending the initial log report', res);
+    }
+
+    // send CU or debug INSPECT message
+    if (!(action.payload.speechKey && action.payload.speechRegion)) {
+      res = yield ChatSagas.sendInitialActivity({ conversationId, members, mode: action.payload.mode });
+      if (!res.ok) {
+        yield* throwErrorFromResponse('Error occurred while sending the initial activity', res);
       }
+    }
 
-      const endpoint: IEndpointService = yield endpointResponse.json();
+    // remember the endpoint
+    yield call(
+      [BotSagas.commandService, BotSagas.commandService.remoteCall],
+      SharedConstants.Commands.Settings.SaveBotUrl,
+      action.payload.endpoint
+    );
 
-      const document: ChatDocument = yield select((state: RootState) => state.chat.chats[documentId]);
-      // End the direct line connection
-      if (document.directLine) {
-        document.directLine.end();
-      }
-      document.directLine = null;
-      // Clear the chat log which is an action
-      // that calls into a saga. This is an async
-      // saga and is critical to wait for completion
-      // until the next item is processed.
-      let resolver = null;
-      const awaiter = new Promise(resolve => {
-        resolver = resolve;
-      });
-      yield put(ChatActions.clearLog(documentId, resolver));
-      yield awaiter;
-
-      yield put(ChatActions.setInspectorObjects(documentId, []));
-
-      yield* BotSagas.openBotViaUrl(
-        openBotViaUrlAction({
-          conversationId,
-          appPassword: endpoint.appPassword,
-          appId: endpoint.appId,
-          endpoint: endpoint.endpoint,
-          mode: document.mode,
-          user,
+    // telemetry
+    if (!action.payload.isFromBotFile) {
+      BotSagas.commandService
+        .remoteCall(SharedConstants.Commands.Telemetry.TrackEvent, 'bot_open', {
+          numOfServices: 0,
+          source: 'url',
         })
-      );
-    } catch (e) {
-      error = '' + e;
+        .catch(_ => void 0);
     }
-
-    if (error) {
-      const errorNotification = beginAdd(newNotification(error));
-      yield put(errorNotification);
-    }
-  }
-
-  public static *openBotViaUrl(action: BotAction<Partial<StartConversationParams>>) {
-    const serverUrl = yield select((state: RootState) => state.clientAwareSettings.serverUrl);
-    if (!action.payload.user) {
-      // If no user is provided, select the current user
-      const customUserId = yield select((state: RootState) => state.framework.userGUID);
-      const users: UserSettings = yield select((state: RootState) => state.clientAwareSettings.users);
-      action.payload.user = customUserId || users.usersById[users.currentUserId];
-      if (customUserId) {
-        action.payload.user = customUserId;
-        yield call(
-          [BotSagas.commandService, BotSagas.commandService.remoteCall],
-          SharedConstants.Commands.Emulator.SetCurrentUser,
-          customUserId
-        );
-      }
-    }
-    let error;
-    try {
-      const response: Response = yield ConversationService.startConversation(serverUrl, action.payload);
-
-      if (!response.ok) {
-        error = `An Error occurred opening the bot at ${action.payload.endpoint}: ${response.statusText}`;
-      }
-
-      if (action.payload.mode === 'debug') {
-        // extract the conversation id from the body
-        const parsedBody = yield response.json();
-        const conversationId = parsedBody.id || '';
-        if (conversationId) {
-          // post debug init command to conversation
-          const activity = {
-            type: 'message',
-            text: '/INSPECT open',
-          };
-          const postActivityResponse: ResourceResponse & {
-            statusCode: number;
-            response?: { message: string; status: number | string };
-          } = yield call(
-            [BotSagas.commandService, BotSagas.commandService.remoteCall],
-            SharedConstants.Commands.Emulator.PostActivityToConversation,
-            conversationId,
-            activity
-          );
-          if (postActivityResponse.statusCode > 399) {
-            const { message = 'Message unavailable.', status = 'Status unavailable' } =
-              postActivityResponse.response || {};
-            error =
-              `An error occurred while POSTing "/INSPECT open" command to conversation ${conversationId}: ` +
-              `${status}: ${message}`;
-          }
-        } else {
-          error = 'An error occurred while trying to grab conversation ID from the new conversation.';
-        }
-      }
-    } catch (e) {
-      error = e.message;
-    }
-    if (error) {
-      const errorNotification = beginAdd(newNotification(error));
-      yield put(errorNotification);
-    } else {
-      // remember the endpoint
-      yield call(
-        [BotSagas.commandService, BotSagas.commandService.remoteCall],
-        SharedConstants.Commands.Settings.SaveBotUrl,
-        action.payload.endpoint
-      );
-      BotSagas.commandService.remoteCall(SharedConstants.Commands.Telemetry.TrackEvent, 'bot_open', {
-        method: null, // this code path can be hit by multiple methods
-        numOfServices: 0,
-        source: 'url',
-      });
-    }
+    BotSagas.commandService
+      .remoteCall(SharedConstants.Commands.Telemetry.TrackEvent, 'livechat_open', {
+        isDebug: action.payload.mode === 'debug',
+        isGov: action.payload.channelService === 'azureusgovernment',
+        isRemote: !isLocalHostUrl(action.payload.endpoint),
+      })
+      .catch(_ => void 0);
   }
 }
 
@@ -216,7 +189,6 @@ export function* botSagas(): IterableIterator<ForkEffect> {
   yield takeEvery(BotActionType.browse, BotSagas.browseForBot);
   yield takeEvery(BotActionType.openViaUrl, BotSagas.openBotViaUrl);
   yield takeEvery(BotActionType.openViaFilePath, BotSagas.openBotViaFilePath);
-  yield takeEvery(BotActionType.restartConversation, BotSagas.restartConversation);
   yield takeEvery(BotActionType.setActive, BotSagas.generateHashForActiveBot);
   yield takeLatest(
     [BotActionType.setActive, BotActionType.load, BotActionType.close],

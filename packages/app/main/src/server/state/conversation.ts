@@ -37,7 +37,6 @@ import * as HttpStatus from 'http-status-codes';
 import updateIn from 'simple-update-in';
 import {
   appSettingsItem,
-  CheckoutConversationSession,
   EmulatorMode,
   ErrorCodes,
   externalLinkItem,
@@ -45,10 +44,6 @@ import {
   LogLevel,
   networkRequestItem,
   networkResponseItem,
-  PaymentOperations,
-  PaymentRequest,
-  PaymentRequestComplete,
-  PaymentRequestUpdate,
   ResourceResponse,
   textItem,
   TranscriptRecord,
@@ -60,7 +55,6 @@ import {
   ChannelAccount,
   ConversationAccount,
   IContactRelationUpdateActivity,
-  IInvokeActivity,
   IMessageActivity,
 } from 'botframework-schema';
 import { traceContainsDebugData, ValueTypesMask } from '@bfemulator/app-shared';
@@ -68,8 +62,6 @@ import { traceContainsDebugData, ValueTypesMask } from '@bfemulator/app-shared';
 import { TokenCache } from '../routes/channel/userToken/tokenCache';
 import { createAPIException } from '../utils/createResponse/createAPIException';
 import { createResourceResponse } from '../utils/createResponse/createResourceResponse';
-import { OAuthClientEncoder } from '../utils/oauthClientEncoder';
-import { PaymentEncoder } from '../utils/paymentEncoder';
 import { uniqueId } from '../utils/uniqueId';
 import { EmulatorRestServer } from '../restServer';
 
@@ -94,10 +86,6 @@ export class Conversation extends EventEmitter {
   public emulatorServer: EmulatorRestServer;
   public user: User;
   public mode: EmulatorMode;
-  // flag indicating if the user has been shown the
-  // "please don't use default Bot State API" warning message
-  // when they try to write bot state data
-  public stateApiDeprecationWarningShown: boolean = false;
   public codeVerifier: string = undefined;
   public members: User[] = [];
   public nextWatermark = 0;
@@ -145,21 +133,7 @@ export class Conversation extends EventEmitter {
       );
     }
 
-    // Do not make a shallow copy here before modifying
-    activity = this.postage(this.botEndpoint.botId, activity);
-    activity.from = activity.from || this.user;
-    activity.locale = this.emulatorServer.state.locale;
-
-    if (!activity.recipient.name) {
-      activity.recipient.name = 'Bot';
-    }
-
-    // Fill in role field, if missing
-    if (!activity.recipient.role) {
-      activity.recipient.role = 'bot';
-    }
-
-    activity.serviceUrl = await this.emulatorServer.getServiceUrl(this.botEndpoint.botUrl);
+    activity = await this.prepActivityToBeSentToBot(activity, recordInConversation);
 
     if (
       !this.conversationIsTranscript &&
@@ -189,13 +163,6 @@ export class Conversation extends EventEmitter {
       method: 'POST',
     };
 
-    if (recordInConversation) {
-      this.addActivityToQueue({ ...activity } as Activity);
-    }
-
-    this.transcript = [...this.transcript, { type: 'activity add', activity }];
-    this.emit('transcriptupdate');
-
     let status = 200;
     let resp: any = { json: async () => ({}) };
 
@@ -207,7 +174,7 @@ export class Conversation extends EventEmitter {
     }
 
     return {
-      activityId: activity.id,
+      updatedActivity: activity,
       response: resp,
       statusCode: status,
     };
@@ -254,54 +221,6 @@ export class Conversation extends EventEmitter {
       ),
       textItem(LogLevel.Debug, `directline.conversationUpdate`)
     );
-  }
-
-  /**
-   * Queues activity for delivery to user.
-   */
-  public postActivityToUser(activity: Activity, isHistoric: boolean = false): ResourceResponse {
-    activity = this.processActivity(activity);
-    activity = this.postage(this.user.id, activity, isHistoric);
-
-    if (!activity.from.name) {
-      activity.from.name = 'Bot';
-    }
-
-    if (activity.name === 'ReceivedActivity') {
-      activity.value.from.role = 'user';
-    } else if (activity.name === 'SentActivity') {
-      activity.value.from.role = 'bot';
-    }
-
-    if (!activity.locale) {
-      activity.locale = this.emulatorServer.state.locale;
-    }
-
-    // Fill in role field, if missing
-    if (!activity.recipient.role) {
-      activity.recipient.role = 'user';
-    }
-
-    this.addActivityToQueue(activity);
-    this.transcript = [...this.transcript, { type: 'activity add', activity }];
-    this.emit('transcriptupdate');
-
-    if (activity.type === 'endOfConversation') {
-      this.emit('end');
-    }
-
-    return createResourceResponse(activity.id);
-  }
-
-  // TODO: Payment modification is only useful for emulator, but not local mode
-  //       This function turns all payment cardAction into openUrl to payment://
-  public processActivity(activity: Activity): Activity {
-    const visitors = [new PaymentEncoder(), new OAuthClientEncoder(activity)];
-
-    activity = { ...activity };
-    visitors.forEach(v => v.traverseActivity(activity));
-
-    return activity;
   }
 
   // This function turns local contentUrls into dataUrls://
@@ -490,109 +409,8 @@ export class Conversation extends EventEmitter {
     this.emit('transcriptupdate');
   }
 
-  public async sendUpdateShippingAddressOperation(
-    checkoutSession: CheckoutConversationSession,
-    request: PaymentRequest,
-    shippingAddress: PaymentAddress,
-    shippingOptionId: string
-  ) {
-    return this.sendUpdateShippingOperation(
-      checkoutSession,
-      PaymentOperations.UpdateShippingAddressOperationName,
-      request,
-      shippingAddress,
-      shippingOptionId
-    );
-  }
-
-  public async sendUpdateShippingOptionOperation(
-    checkoutSession: CheckoutConversationSession,
-    request: PaymentRequest,
-    shippingAddress: PaymentAddress,
-    shippingOptionId: string
-  ) {
-    return this.sendUpdateShippingOperation(
-      checkoutSession,
-      PaymentOperations.UpdateShippingOptionOperationName,
-      request,
-      shippingAddress,
-      shippingOptionId
-    );
-  }
-
-  public async sendPaymentCompleteOperation(
-    checkoutSession: CheckoutConversationSession,
-    request: PaymentRequest,
-    shippingAddress: PaymentAddress,
-    shippingOptionId: string,
-    payerEmail: string,
-    payerPhone: string
-  ) {
-    if (!this.botEndpoint) {
-      return this.emulatorServer.logger.logMessage(
-        this.conversationId,
-        textItem(
-          LogLevel.Error,
-          'Error: This conversation does not have an endpoint, cannot send payment complete activity.'
-        )
-      );
-    }
-
-    const paymentTokenHeader = {
-      amount: request.details.total.amount,
-      expiry: '1/1/2020',
-      format: 2,
-      merchantId: request.methodData[0].data.merchantId,
-      paymentRequestId: request.id,
-      timestamp: '4/27/2017',
-    };
-
-    const paymentTokenHeaderStr = JSON.stringify(paymentTokenHeader);
-    const pthBytes = Buffer.from(paymentTokenHeaderStr).toString('base64');
-
-    const paymentTokenSource = 'tok_18yWDMKVgMv7trmwyE21VqO';
-    const ptsBytes = Buffer.from(paymentTokenSource).toString('base64');
-
-    const ptsigBytes = Buffer.from('Emulator').toString('base64');
-
-    const updateValue: PaymentRequestComplete = {
-      id: request.id,
-      paymentRequest: request,
-      paymentResponse: {
-        details: {
-          paymentToken: pthBytes + '.' + ptsBytes + '.' + ptsigBytes,
-        },
-        methodName: request.methodData[0].supportedMethods[0],
-        payerEmail,
-        payerPhone,
-        shippingAddress,
-        shippingOption: shippingOptionId,
-      },
-    };
-
-    const activity = {
-      type: 'invoke',
-      name: PaymentOperations.PaymentCompleteOperationName,
-      from: { id: checkoutSession.checkoutFromId } as ChannelAccount,
-      conversation: { id: checkoutSession.checkoutConversationId } as ConversationAccount,
-      relatesTo: {
-        activityId: checkoutSession.paymentActivityId,
-        bot: { id: this.botEndpoint.botId } as ChannelAccount,
-        channelId: 'emulator',
-        conversation: { id: this.conversationId } as ConversationAccount,
-        serviceUrl: await this.emulatorServer.getServiceUrl(this.botEndpoint.botUrl),
-        user: this.emulatorServer.state.users.usersById(this.emulatorServer.state.users.currentUserId),
-      },
-      value: updateValue,
-    } as IInvokeActivity;
-
-    const { response } = await this.postActivityToBot(activity as Activity, false);
-
-    return response;
-  }
-
   public async sendTokenResponse(connectionName: string, token: string, doNotCache?: boolean) {
-    const userId = this.emulatorServer.state.users.currentUserId;
+    const userId = this.user.id;
 
     if (!doNotCache) {
       TokenCache.addTokenToCache(this.botEndpoint.botId, userId, connectionName, token);
@@ -622,8 +440,7 @@ export class Conversation extends EventEmitter {
     };
   }
 
-  // TODO: This need to be redesigned
-  public feedActivities(activities: Activity[]) {
+  public prepTranscriptActivities(activities: Activity[]): Activity[] {
     /*
      * We need to fixup the activities to look like they're part of the current conversation.
      * This a limitation of the way the emulator was originally designed, and not a problem
@@ -678,15 +495,7 @@ export class Conversation extends EventEmitter {
         }
       });
     }
-
-    // Add activities to the queue
-    activities.forEach(activity => {
-      if (activity.recipient && activity.recipient.role === 'user') {
-        activity = this.processActivity(activity);
-      }
-
-      this.addActivityToQueue(activity);
-    });
+    return activities;
   }
 
   /**
@@ -712,56 +521,8 @@ export class Conversation extends EventEmitter {
     return activities;
   }
 
-  private async sendUpdateShippingOperation(
-    checkoutSession: CheckoutConversationSession,
-    operation: string,
-    request: PaymentRequest,
-    shippingAddress: PaymentAddress,
-    shippingOptionId: string
-  ) {
-    if (!this.botEndpoint) {
-      return this.emulatorServer.logger.logMessage(
-        this.conversationId,
-        textItem(
-          LogLevel.Error,
-          'Error: This conversation does not have an endpoint, cannot send update shipping activity.'
-        )
-      );
-    }
-
-    const updateValue: PaymentRequestUpdate = {
-      id: request.id,
-      shippingAddress,
-      shippingOption: shippingOptionId,
-      details: request.details,
-    };
-
-    const activity = {
-      type: 'invoke',
-      name: operation,
-      from: { id: checkoutSession.checkoutFromId },
-      conversation: { id: checkoutSession.checkoutConversationId },
-      relatesTo: {
-        activityId: checkoutSession.paymentActivityId,
-        bot: { id: this.botEndpoint.botId },
-        channelId: 'emulator',
-        conversation: { id: this.conversationId },
-        serviceUrl: await this.emulatorServer.getServiceUrl(this.botEndpoint.botUrl),
-        user: this.emulatorServer.state.users.usersById(this.emulatorServer.state.users.currentUserId),
-      },
-      value: updateValue,
-    } as IInvokeActivity;
-
-    const { response } = await this.postActivityToBot(activity as Activity, false);
-
-    // TODO: Should we record this in transcript? It looks like normal IInvokeActivity
-
-    return response;
-  }
-
-  private postage(recipientId: string, activity: Partial<Activity>, isHistoric: boolean = false): Activity {
+  public postage(recipientId: string, activity: Partial<Activity>, isHistoric: boolean = false): Activity {
     const date = moment();
-
     const timestamp = isHistoric ? activity.timestamp : date.toISOString();
     const recipient = isHistoric ? activity.recipient : ({ id: recipientId } as ChannelAccount);
 
@@ -774,6 +535,60 @@ export class Conversation extends EventEmitter {
       recipient,
       timestamp,
     } as Activity;
+  }
+
+  public prepActivityToBeSentToUser(userId: string, activity: Activity): Activity {
+    activity = this.postage(userId, activity, false);
+    if (!activity.from.name) {
+      activity.from.name = 'Bot';
+    }
+
+    if (activity.name === 'ReceivedActivity') {
+      activity.value.from.role = 'user';
+    } else if (activity.name === 'SentActivity') {
+      activity.value.from.role = 'bot';
+    }
+
+    if (!activity.locale) {
+      activity.locale = this.emulatorServer.state.locale;
+    }
+
+    // Fill in role field, if missing
+    if (!activity.recipient.role) {
+      activity.recipient.role = 'user';
+    }
+
+    // internal tracking
+    this.addActivityToQueue(activity);
+    this.transcript = [...this.transcript, { type: 'activity add', activity }];
+    return activity;
+  }
+
+  public async prepActivityToBeSentToBot(activity: Activity, recordInConversation: boolean): Promise<Activity> {
+    // Do not make a shallow copy here before modifying
+    activity = this.postage(this.botEndpoint.botId, activity);
+    activity.from = activity.from || this.user;
+    activity.locale = this.emulatorServer.state.locale;
+
+    if (!activity.recipient.name) {
+      activity.recipient.name = 'Bot';
+    }
+
+    // Fill in role field, if missing
+    if (!activity.recipient.role) {
+      activity.recipient.role = 'bot';
+    }
+
+    activity.serviceUrl = await this.emulatorServer.getServiceUrl(this.botEndpoint.botUrl);
+
+    if (recordInConversation) {
+      this.addActivityToQueue({ ...activity } as Activity);
+    }
+
+    this.transcript = [...this.transcript, { type: 'activity add', activity }];
+    this.emit('transcriptupdate');
+
+    return { ...activity };
   }
 
   private addActivityToQueue(activity: Activity) {

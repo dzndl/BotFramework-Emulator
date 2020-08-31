@@ -32,7 +32,10 @@
 //
 
 import * as React from 'react';
+import { SharedConstants, RestartConversationOptions } from '@bfemulator/app-shared';
 import { Activity } from 'botframework-schema';
+import { RestartConversationStatus } from '@bfemulator/app-shared';
+import { EmulatorMode } from '@bfemulator/sdk-shared';
 
 import { areActivitiesEqual } from '../../../../../utils';
 
@@ -42,14 +45,40 @@ export interface OuterActivityWrapperProps {
   card?: any;
   children?: any;
   highlightedActivities?: Activity[];
+  documentId: string;
   onContextMenu?: (event: React.MouseEvent<HTMLElement>) => void;
   onItemRendererClick?: (event: React.MouseEvent<HTMLElement>) => void;
   onItemRendererKeyDown?: (event: React.KeyboardEvent<HTMLElement>) => void;
+  onRestartConversationFromActivityClick?: (
+    documentId: string,
+    activity: Activity,
+    restartOption: RestartConversationOptions
+  ) => void;
+  currentRestartConversationOption: RestartConversationOptions;
+  mode: EmulatorMode;
+  restartStatus: RestartConversationStatus;
+  isDLSpeechBot: boolean;
 }
 
 export class OuterActivityWrapper extends React.Component<OuterActivityWrapperProps, {}> {
   public render() {
-    const { card, children, onContextMenu, onItemRendererClick, onItemRendererKeyDown } = this.props;
+    const {
+      card,
+      children,
+      onContextMenu,
+      onItemRendererClick,
+      onItemRendererKeyDown,
+      mode,
+      restartStatus,
+      isDLSpeechBot,
+    } = this.props;
+
+    const isSelected = this.shouldBeSelected(card.activity);
+    const isUserActivity = this.isUserActivity(card.activity);
+    const isWebChatDisabled =
+      mode === 'transcript' || mode === 'debug' || restartStatus === RestartConversationStatus.Started;
+
+    const showRestartBubble = !isDLSpeechBot && isUserActivity && isSelected && !isWebChatDisabled;
 
     return (
       <ActivityWrapper
@@ -58,11 +87,25 @@ export class OuterActivityWrapper extends React.Component<OuterActivityWrapperPr
         onClick={onItemRendererClick}
         onKeyDown={onItemRendererKeyDown}
         onContextMenu={onContextMenu}
-        isSelected={this.shouldBeSelected(card.activity)}
+        isSelected={isSelected}
+        onRestartConversationFromActivityClick={this.onRestartConversationFromActivityClick}
+        showRestartBubble={showRestartBubble}
       >
         {children}
       </ActivityWrapper>
     );
+  }
+
+  private onRestartConversationFromActivityClick = () => {
+    this.props.onRestartConversationFromActivityClick(
+      this.props.documentId,
+      this.props.card.activity,
+      this.props.currentRestartConversationOption
+    );
+  };
+
+  private isUserActivity(activity: Activity) {
+    return !!(activity.from.role === SharedConstants.Activity.USER_ROLE && !activity.replyToId && activity.channelData);
   }
 
   private shouldBeSelected(subject: Activity): boolean {

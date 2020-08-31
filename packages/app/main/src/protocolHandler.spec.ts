@@ -40,7 +40,7 @@
 // will be overwritten due to the call to "jest.mock('./main', ...)"
 
 import './fetchProxy';
-import { SharedConstants } from '@bfemulator/app-shared';
+import { openBotViaUrlAction, openTranscript, SharedConstants } from '@bfemulator/app-shared';
 import { applyBotConfigOverrides } from '@bfemulator/sdk-shared';
 import { CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
 
@@ -72,7 +72,11 @@ jest.mock('./globals', () => ({
 }));
 
 let mockNgrokPath;
+const mockDispatch = jest.fn();
 jest.mock('./state/store', () => ({
+  store: {
+    dispatch: action => mockDispatch(action),
+  },
   getSettings: () => ({
     framework: {
       ngrokPath: mockNgrokPath,
@@ -183,6 +187,7 @@ describe('Protocol handler tests', () => {
     };
     mockRecycle.mockClear();
     mockGetSpawnStatus.mockClear();
+    mockDispatch.mockClear();
   });
 
   afterAll(() => {
@@ -273,17 +278,16 @@ describe('Protocol handler tests', () => {
       ProtocolHandler.parseProtocolUrlAndDispatch(
         'bfemulator://livechat.open?botUrl=http://localhost/&msaAppId=id&msaAppPassword=pass'
       );
-      expect(mockRemoteCallsMade).toHaveLength(1);
-      expect(mockRemoteCallsMade[0].commandName).toBe(SharedConstants.Commands.UI.OpenBotViaUrl);
-      expect(mockRemoteCallsMade[0].args).toEqual([
-        {
+
+      expect(mockDispatch).toHaveBeenCalledWith(
+        openBotViaUrlAction({
           endpoint: 'http://localhost/',
           appId: 'id',
           appPassword: 'pass',
           mode: 'livechat',
-        },
-      ]);
-
+          channelService: undefined,
+        })
+      );
       expect(spy).toHaveBeenCalledWith({
         action: 'open',
         args: 'botUrl=http://localhost/&msaAppId=id&msaAppPassword=pass',
@@ -307,23 +311,21 @@ describe('Protocol handler tests', () => {
       });
     });
 
-    it('should dispatch a inspector action', () => {
+    it('should dispatch an inspector action', () => {
       const spy = jest.spyOn(ProtocolHandler, 'performInspectorAction');
       ProtocolHandler.parseProtocolUrlAndDispatch(
         'bfemulator://inspector.open?botUrl=http://localhost/&msaAppId=id&msaAppPassword=pass&cloud=azureusgovernment'
       );
-      expect(mockRemoteCallsMade).toHaveLength(1);
-      expect(mockRemoteCallsMade[0].commandName).toBe(SharedConstants.Commands.UI.OpenBotViaUrl);
-      expect(mockRemoteCallsMade[0].args).toEqual([
-        {
+
+      expect(mockDispatch).toHaveBeenCalledWith(
+        openBotViaUrlAction({
+          endpoint: 'http://localhost/',
           appId: 'id',
           appPassword: 'pass',
-          channelService: 'azureusgovernment',
-          endpoint: 'http://localhost/',
           mode: 'debug',
-        },
-      ]);
-
+          channelService: 'azureusgovernment' as any,
+        })
+      );
       expect(spy).toHaveBeenCalledWith({
         action: 'open',
         args: 'botUrl=http://localhost/&msaAppId=id&msaAppPassword=pass&cloud=azureusgovernment',
@@ -501,19 +503,11 @@ describe('Protocol handler tests', () => {
     const protocol = {
       parsedArgs: { url: 'https://www.test.com/convo1.transcript' },
     };
-
     await ProtocolHandler.openTranscript(protocol);
 
-    expect(mockRemoteCallsMade).toHaveLength(1);
-    expect(mockRemoteCallsMade[0].commandName).toBe(SharedConstants.Commands.Emulator.OpenTranscript);
-    expect(mockRemoteCallsMade[0].args).toEqual([
-      'deepLinkedTranscript',
-      {
-        activities: ['activity1', 'activity2', 'activity3'],
-        inMemory: true,
-        fileName: 'convo1.transcript',
-      },
-    ]);
+    expect(mockDispatch).toHaveBeenCalledWith(
+      openTranscript('convo1.transcript', ['activity1', 'activity2', 'activity3'] as any)
+    );
   });
 
   it('should send a notification if trying to open a transcript from a url results in a 401 or 404', async () => {

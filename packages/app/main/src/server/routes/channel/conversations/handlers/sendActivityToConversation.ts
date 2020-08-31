@@ -31,23 +31,25 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-import { ResourceResponse } from '@bfemulator/sdk-shared';
 import { Activity } from 'botframework-schema';
 import * as HttpStatus from 'http-status-codes';
 import { Next, Request, Response } from 'restify';
 
 import { sendErrorResponse } from '../../../../utils/sendErrorResponse';
+import { WebSocketServer } from '../../../../webSocketServer';
+import { Conversation } from '../../../../state/conversation';
 
 export function sendActivityToConversation(req: Request, res: Response, next: Next): any {
-  const activity = req.body as Activity;
+  let activity = req.body as Activity;
   try {
     activity.id = null;
     activity.replyToId = req.params.activityId;
+    const { conversation }: { conversation: Conversation } = req as any;
 
     // post activity
-    const response: ResourceResponse = (req as any).conversation.postActivityToUser(activity);
-
-    res.send(HttpStatus.OK, response);
+    activity = conversation.prepActivityToBeSentToUser(conversation.user.id, activity);
+    WebSocketServer.sendToSubscribers(conversation.conversationId, activity);
+    res.send(HttpStatus.OK, { id: activity.id });
     res.end();
   } catch (err) {
     sendErrorResponse(req, res, next, err);

@@ -59,6 +59,7 @@ const selectionMap = [
   Constants.NAVBAR_RESOURCES,
   Constants.NAVBAR_NOTIFICATIONS,
   Constants.NAVBAR_SETTINGS,
+  Constants.NAVBAR_NGROK_DEBUGGER,
 ];
 
 export class NavBarComponent extends React.Component<NavBarProps, NavBarState> {
@@ -82,7 +83,11 @@ export class NavBarComponent extends React.Component<NavBarProps, NavBarState> {
       // 1: Resources
       // 2: Notifications
       case 0:
+      // Falls through
+
       case 1:
+      // Falls through
+
       case 2:
         if (currentSelection === selectionMap[index]) {
           // toggle explorer when clicking the same navbar icon
@@ -100,8 +105,6 @@ export class NavBarComponent extends React.Component<NavBarProps, NavBarState> {
           this.setState({ selection: selectionMap[index] });
         }
         break;
-
-      // Settings
       default:
         this.props.openEmulatorSettings();
         break;

@@ -4,7 +4,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v4.10.0 - 2020 - 08 - 21
+## Added
+- [client] Added a log panel entry at the start of a conversation that displays the bot endpoint in PR [2149](https://github.com/microsoft/BotFramework-Emulator/pull/2149)
+- [client] - Bumped `botframework-webchat` to v4.10.0 in PR [2177](https://github.com/microsoft/BotFramework-Emulator/pull/2177)
+
+## Fixed
+- [client] Added missing content to signed in view of Cosmos DB service dialog and fixed product page link in PR [2150](https://github.com/microsoft/BotFramework-Emulator/pull/2150)
+- [docs] Modified CONTRIBUTING.md to include updated information about global dependencies required to build from source in PR [2153](https://github.com/microsoft/BotFramework-Emulator/pull/2153)
+- [client] Fixed a bug where trying to open the sign-in link on an OAuth card would open the file explorer if ngrok was not configured in PR [2155](https://github.com/microsoft/BotFramework-Emulator/pull/2155)
+- [client] Change to a warning message in inspector when clicking on LUIS trace [2160](https://github.com/microsoft/BotFramework-Emulator/pull/2160)
+- [client] Handle result from webchat middleware gracefully [2177](https://github.com/microsoft/BotFramework-Emulator/pull/2177)
+- [client] Handle Webchat socket instantiation delay [2179](https://github.com/microsoft/BotFramework-Emulator/pull/2179)
+
+## v4.9.0 - 2020 - 05 - 11
+## Added
+- [main] Exposed `id` field on response object returned from `/v3/conversations` endpoint in PR [2129](https://github.com/microsoft/BotFramework-Emulator/pull/2129)
+
+- [client] - Bumped `botframework-webchat` to v4.9.0 in PR [2142](https://github.com/microsoft/BotFramework-Emulator/pull/2142)
+
+## Fixed
+- [build] Fixed system dialog on Mac OS warning about being unable to check for malicious code in PR [2135](https://github.com/microsoft/BotFramework-Emulator/pull/2135)
+- [client / main] Fixed an issue where starting a conversation via deeplink was initializing the WebSocket server twice and closing previously established connections in PR [2146](https://github.com/microsoft/BotFramework-Emulator/pull/2146)
+
+## v4.8.1 - 2019 - 03 - 18
+## Fixed
+- [build] Replaced a missing .icns file that was deleted by mistake in a previous PR. Fixes the app icon on Linux & Mac in PR [2104](https://github.com/microsoft/BotFramework-Emulator/pull/2104)
+- [client] Fixed an issue where Restart activity wont appear on selected activity after restarting once in PR [2105](https://github.com/microsoft/BotFramework-Emulator/pull/2105)
+- [client] Disable "Restart conversation from here" bubble on DL Speech bots [2107](https://github.com/microsoft/BotFramework-Emulator/pull/2107)
+- [client] Fixed an issue where starting a conversation with an unset custom user ID was causing the User member of the conversation to have a blank `id` field in PR [2108](https://github.com/microsoft/BotFramework-Emulator/pull/2108)
+- [main] Fixed an issue where the setting `Bypass Ngrok for local addresses` was continuing to use the ngrok tunnel even for local bots in PR [2111](https://github.com/microsoft/BotFramework-Emulator/pull/2111)
+- [main] Ngrok Reporting made accurate in PR [2113](https://github.com/microsoft/BotFramework-Emulator/pull/2113)
+
+## v4.8.0 - 2019 - 03 - 12
+## Added
+- [client/main] Added Ngrok Status Viewer in PR [2032](https://github.com/microsoft/BotFramework-Emulator/pull/2032)
+- [client/main] Changed conversation infrastructure to use Web Sockets to communicate with Web Chat in PR [2034](https://github.com/microsoft/BotFramework-Emulator/pull/2034)
+- [client/main] Added new telemetry events and properties in PR [2063](https://github.com/microsoft/BotFramework-Emulator/pull/2063)
+- [client] Added support for talking to remote Direct Line Speech bots in PR [2079](https://github.com/microsoft/BotFramework-Emulator/pull/2079)
+- [client/main] Added support to restart conversation from any point in PR [2089](https://github.com/microsoft/BotFramework-Emulator/pull/2089)
+- [client] - Bumped `botframework-webchat` to v4.8.0 in PR [2094](https://github.com/microsoft/BotFramework-Emulator/pull/2094)
+
+## Fixed
+- [client] Hid services pane by default in PR [2059](https://github.com/microsoft/BotFramework-Emulator/pull/2059)
+- [client/main] Moved duplicate redux store code (actions / reducers / helpers) to `app/shared` package in PR [2060](https://github.com/microsoft/BotFramework-Emulator/pull/2060)
+- [client] Fixed an issue where trying to add a QnA KB manually after signing into Azure was causing the app to crash in PR [2066](https://github.com/microsoft/BotFramework-Emulator/pull/2066)
+- [client] Removed buble background on attachments [2067](https://github.com/microsoft/BotFramework-Emulator/pull/2067)
+- [client] Fixed an issue where the themes menu was empty on Windows & Linux in PR [2069](https://github.com/microsoft/BotFramework-Emulator/pull/2069)
+- [client] Fixed Web Chat suggestedActionBorder deprecation warning in PR [2070](https://github.com/microsoft/BotFramework-Emulator/pull/2070)
+- [client] Fixed an issue where pressing enter opens the Azure government website instead of connecting to the bot  [2073](https://github.com/microsoft/BotFramework-Emulator/pull/2073)
+- [build] Changed one-click installer to assisted installer with new graphics. Also updated application icon in PR [2077](https://github.com/microsoft/BotFramework-Emulator/pull/2077)
+- [build] Locked `eslint-plugin-import@2.20.0` to avoid unecessary import linting changes in PR [2081](https://github.com/microsoft/BotFramework-Emulator/pull/2081)
+- [client] Thrown errors in client-side sagas will now be logged in their entirety to the dev tools console in PR [2087](https://github.com/microsoft/BotFramework-Emulator/pull/2087)
+- [client] Upload and download attachments bubble texts and background in webchat were hidden. The adjustments have been made to override FileContent class in PR [2088](https://github.com/microsoft/BotFramework-Emulator/pull/2088)
+- [client] Fixed an issue that was causing adaptive card focus to be blurred when clicking on an activity in PR [2090](https://github.com/microsoft/BotFramework-Emulator/pull/2090)
+- [client] Fixed an accessibility issue with the recent bots list remove button in PR [2091](https://github.com/microsoft/BotFramework-Emulator/pull/2091)
+- [client] Copy secret key button now copies the secret key to the clipboar when creating a new bot file in PR [2098](https://github.com/microsoft/BotFramework-Emulator/pull/2098)
+- [client] Fixed an issue on Windows & Linux where the "Close tab" item was missing in the File menu in PR [2100](https://github.com/microsoft/BotFramework-Emulator/pull/2100)
+
+## Removed
+- [client/main] Removed legacy payments code in PR [2058](https://github.com/microsoft/BotFramework-Emulator/pull/2058)
+
+## v4.7.0 - 2019 - 12 - 13
 ## Fixed
 - [client] Added an empty state for the recent bots submenu in the app menu for Windows in PR [1945](https://github.com/microsoft/BotFramework-Emulator/pull/1945)
 - [client] Fixed a bug that was showing the custom user ID validation message when disabled in PR [1946](https://github.com/microsoft/BotFramework-Emulator/pull/1946)
@@ -26,6 +87,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - [2009](https://github.com/microsoft/BotFramework-Emulator/pull/2009)
   - [2010](https://github.com/microsoft/BotFramework-Emulator/pull/2010)
   - [2012](https://github.com/microsoft/BotFramework-Emulator/pull/2012)
+  - [2013](https://github.com/microsoft/BotFramework-Emulator/pull/2013)
+  - [2014](https://github.com/microsoft/BotFramework-Emulator/pull/2014)
+  - [2015](https://github.com/microsoft/BotFramework-Emulator/pull/2015)
+  - [2016](https://github.com/microsoft/BotFramework-Emulator/pull/2016)
+  - [2017](https://github.com/microsoft/BotFramework-Emulator/pull/2017)
+  - [2018](https://github.com/microsoft/BotFramework-Emulator/pull/2018)
+  - [2019](https://github.com/microsoft/BotFramework-Emulator/pull/2019)
+  - [2020](https://github.com/microsoft/BotFramework-Emulator/pull/2020)
+  - [2021](https://github.com/microsoft/BotFramework-Emulator/pull/2021)
+  - [2022](https://github.com/microsoft/BotFramework-Emulator/pull/2022)
 
 - [main] Increased ngrok spawn timeout to 15 seconds to be more forgiving to slower networks in PR [1998](https://github.com/microsoft/BotFramework-Emulator/pull/1998)
 

@@ -31,7 +31,26 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-import { ServiceCodes, SharedConstants } from '@bfemulator/app-shared';
+import {
+  beginAzureAuthWorkflow,
+  sortExplorerContents,
+  ArmTokenData,
+  ConnectedServiceAction,
+  ConnectedServicePayload,
+  ConnectedServicePickerPayload,
+  ServiceCodes,
+  SharedConstants,
+  SortCriteria,
+  LAUNCH_CONNECTED_SERVICE_EDITOR,
+  LAUNCH_CONNECTED_SERVICE_PICKER,
+  LAUNCH_EXTERNAL_LINK,
+  OPEN_ADD_CONNECTED_SERVICE_CONTEXT_MENU,
+  OPEN_CONNECTED_SERVICE_SORT_CONTEXT_MENU,
+  OPEN_CONTEXT_MENU_FOR_CONNECTED_SERVICE,
+  OPEN_SERVICE_DEEP_LINK,
+  OpenAddServiceContextMenuPayload,
+  OpenSortContextMenuPayload,
+} from '@bfemulator/app-shared';
 import { BotConfigWithPath, CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
 import { BotConfigurationBase } from 'botframework-config/lib/botConfigurationBase';
 import {
@@ -46,24 +65,8 @@ import { call, ForkEffect, put, select, takeEvery, takeLatest } from 'redux-saga
 
 import { DialogService } from '../../ui/dialogs/service';
 import { serviceTypeLabels } from '../../utils/serviceTypeLables';
-import { ArmTokenData, beginAzureAuthWorkflow } from '../actions/azureAuthActions';
-import {
-  ConnectedServiceAction,
-  ConnectedServicePayload,
-  ConnectedServicePickerPayload,
-  LAUNCH_CONNECTED_SERVICE_EDITOR,
-  LAUNCH_CONNECTED_SERVICE_PICKER,
-  LAUNCH_EXTERNAL_LINK,
-  OPEN_ADD_CONNECTED_SERVICE_CONTEXT_MENU,
-  OPEN_CONNECTED_SERVICE_SORT_CONTEXT_MENU,
-  OPEN_CONTEXT_MENU_FOR_CONNECTED_SERVICE,
-  OPEN_SERVICE_DEEP_LINK,
-  OpenAddServiceContextMenuPayload,
-  OpenSortContextMenuPayload,
-} from '../actions/connectedServiceActions';
-import { sortExplorerContents } from '../actions/explorerActions';
-import { SortCriteria } from '../reducers/explorer';
 import { RootState } from '../store';
+import { QnAMakerSampleHostname } from '../../constants';
 
 import { AzureAuthSaga } from './azureAuthSaga';
 
@@ -166,7 +169,7 @@ export class ServicesExplorerSagas {
     if (result === 1) {
       action.payload.connectedService = BotConfigurationBase.serviceFromJSON({
         type,
-        hostname: '' /* defect workaround */,
+        hostname: QnAMakerSampleHostname,
       } as any);
       result = yield* ServicesExplorerSagas.launchConnectedServiceEditor(action);
     }
@@ -261,6 +264,14 @@ export class ServicesExplorerSagas {
           [ServicesExplorerSagas.commandService, ServicesExplorerSagas.commandService.remoteCall],
           SharedConstants.Commands.Electron.OpenExternal,
           'https://luis.ai'
+        );
+        break;
+
+      case ServiceTypes.CosmosDB:
+        yield call(
+          [ServicesExplorerSagas.commandService, ServicesExplorerSagas.commandService.remoteCall],
+          SharedConstants.Commands.Electron.OpenExternal,
+          'https://azure.microsoft.com/services/cosmos-db/'
         );
         break;
 

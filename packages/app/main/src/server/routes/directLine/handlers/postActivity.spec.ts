@@ -40,24 +40,79 @@ jest.mock('../../../utils/sendErrorResponse', () => ({
   sendErrorResponse: (...args) => mockSendErrorResponse(...args),
 }));
 
+const mockSocket = {
+  send: jest.fn(),
+};
+
+jest.mock('../../../webSocketServer', () => {
+  return {
+    WebSocketServer: {
+      sendToSubscribers: (...args) => mockSocket.send(...args),
+    },
+  };
+});
+
 describe('postActivity handler', () => {
   beforeEach(() => {
     mockSendErrorResponse.mockClear();
+    mockSocket.send.mockClear();
   });
 
   it('should return a 200 and the id of the posted activity', async () => {
+    const activity = {
+      id: 'activity1',
+    };
+
     const mockEmulatorServer: any = {
       logger: {
         logMessage: jest.fn(),
       },
     };
+
     const req: any = {
-      body: {
-        id: 'activity1',
-      },
+      body: activity,
       conversation: {
         postActivityToBot: jest.fn().mockResolvedValueOnce({
-          activityId: 'activity1',
+          updatedActivity: activity,
+          response: {},
+          statusCode: HttpStatus.OK,
+        }),
+        conversationId: 'convo1',
+      },
+      params: {
+        conversationId: 'convo1',
+      },
+    };
+    const res: any = {
+      end: jest.fn(),
+      send: jest.fn(),
+    };
+    const next = jest.fn();
+    const postActivity = createPostActivityHandler(mockEmulatorServer);
+    await postActivity(req, res, next);
+
+    expect(res.send).toHaveBeenCalledWith(HttpStatus.OK, activity);
+    expect(res.end).toHaveBeenCalled();
+    expect(next).toHaveBeenCalled();
+    expect(mockSocket.send).toHaveBeenCalledWith(req.params.conversationId, activity);
+  });
+
+  it('should return a 200 but not send the /INSPECT open command over the web socket', async () => {
+    const mockEmulatorServer: any = {
+      logger: {
+        logMessage: jest.fn(),
+      },
+    };
+    const activity = {
+      id: 'activity1',
+      text: '/INSPECT open',
+      type: 'message',
+    };
+    const req: any = {
+      body: activity,
+      conversation: {
+        postActivityToBot: jest.fn().mockResolvedValueOnce({
+          updatedActivity: activity,
           response: {},
           statusCode: HttpStatus.OK,
         }),
@@ -77,6 +132,7 @@ describe('postActivity handler', () => {
     expect(res.send).toHaveBeenCalledWith(HttpStatus.OK, { id: 'activity1' });
     expect(res.end).toHaveBeenCalled();
     expect(next).toHaveBeenCalled();
+    expect(mockSocket.send).not.toHaveBeenCalled();
   });
 
   it('should return a 401 if the request is unauthorized', async () => {
@@ -91,7 +147,7 @@ describe('postActivity handler', () => {
       },
       conversation: {
         postActivityToBot: jest.fn().mockResolvedValueOnce({
-          activityId: 'activity1',
+          updatedActivity: {},
           response: {
             text: jest.fn().mockResolvedValueOnce('Unauthorized'),
           },
@@ -201,9 +257,10 @@ describe('postActivity handler', () => {
       },
       conversation: {
         postActivityToBot: jest.fn().mockResolvedValueOnce({
-          activityId: 'activity1',
+          activity: undefined,
           response: {
-            text: jest.fn().mockResolvedValueOnce('Request failed'),
+            message: 'Request failed',
+            status: undefined,
           },
           statusCode: undefined,
         }),
@@ -220,7 +277,10 @@ describe('postActivity handler', () => {
     const postActivity = createPostActivityHandler(mockEmulatorServer);
     await postActivity(req, res, next);
 
-    expect(res.send).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR, 'Request failed');
+    expect(res.send).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR, {
+      message: 'Request failed',
+      status: undefined,
+    });
     expect(res.end).toHaveBeenCalled();
     expect(next).toHaveBeenCalled();
   });

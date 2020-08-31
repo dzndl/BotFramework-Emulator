@@ -34,6 +34,6 @@
 export * from './activityVisitor';
 export * from './constants';
 export * from './enums';
-export * from './paymentEncoder';
+export * from './state';
 export * from './types';
 export * from './utils';

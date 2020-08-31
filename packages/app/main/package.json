@@ -1,13 +1,14 @@
 {
   "name": "@bfemulator/main",
   "packagename": "BotFramework-Emulator",
-  "version": "4.6.0",
+  "version": "4.10.0",
   "private": true,
   "description": "Development tool for the Microsoft Bot Framework. Allows developers to test and debug bots on localhost.",
   "main": "./app/server/main.js",
   "homepage": "https://github.com/Microsoft/BotFramework-Emulator",
   "scripts": {
     "build": "run-s typecheck build:electron",
+    "rebuild:keytar:electron": "electron-rebuild",
     "build:electron": "babel ./src --out-dir app/server --extensions \".ts,.tsx\" --ignore \"**/*.spec.ts\" && npm run copy:extension:stubs",
     "copy:extension:stubs": "ncp src/extensions app/extensions",
     "dist": "electron-builder",
@@ -20,6 +21,7 @@
     "start:react-app": "cd ../client && npm start",
     "start:watch": "nodemon",
     "test": "jest",
+    "test:watch": "jest --watch",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
@@ -77,7 +79,7 @@
     "@babel/plugin-proposal-object-rest-spread": "^7.0.0",
     "@babel/plugin-transform-react-jsx": "^7.0.0",
     "@babel/plugin-transform-runtime": "^7.4.4",
-    "@babel/preset-env": "^7.1.0",
+    "@babel/preset-env": "^7.11.0",
     "@babel/preset-typescript": "^7.1.0",
     "@types/async": "^2.0.47",
     "@types/chokidar": "^1.7.5",
@@ -105,7 +107,7 @@
     "electron-rebuild": "1.8.5",
     "eslint": "^5.12.0",
     "eslint-config-prettier": "^3.5.0",
-    "eslint-plugin-import": "^2.14.0",
+    "eslint-plugin-import": "2.20.0",
     "eslint-plugin-notice": "^0.7.7",
     "eslint-plugin-prettier": "^3.0.1",
     "eslint-plugin-typescript": "^1.0.0-rc.3",
@@ -130,11 +132,11 @@
     "@bfemulator/extension-qnamaker": "^1.0.0",
     "@bfemulator/extension-qnamaker-client": "^0.1.0",
     "@bfemulator/sdk-shared": "^1.0.0",
+    "@microsoft/bf-chatdown": "4.7.0",
     "applicationinsights": "^1.0.8",
     "base64url": "3.0.0",
     "botframework-config": "4.4.0",
     "botframework-schema": "^4.3.4",
-    "chatdown": "^1.0.10",
     "chokidar": "^2.0.2",
     "command-line-args": "^5.0.2",
     "electron-updater": "3.0.3",
@@ -142,7 +144,7 @@
     "fs-extra": "^6.0.1",
     "got": "^7.1.0",
     "http-status-codes": "^1.3.0",
-    "https-proxy-agent": "2.2.1",
+    "https-proxy-agent": "2.2.3",
     "jest-fetch-mock": "^1.6.2",
     "jsonwebtoken": "^8.3.0",
     "keytar": "^4.7.0",
@@ -227,17 +229,19 @@
       "include": "./scripts/config/resources/nsis/installer.nsh",
       "perMachine": false,
       "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
       "packElevateHelper": true,
       "unicode": true,
       "runAfterFinish": true,
+      "installerHeader": "./scripts/config/resources/nsis/installerHeader.bmp",
       "installerIcon": "./scripts/config/resources/icon.ico",
+      "installerSidebar": "./scripts/config/resources/nsis/installerSidebar.bmp",
       "uninstallerIcon": "./scripts/config/resources/icon.ico",
-      "installerHeader": "./sripts/config/resources/nsis/installerHeader.bmp",
-      "installerSidebar": "./sripts/config/resources/nsis/installerSidebar.bmp",
-      "uninstallerSidebar": "./sripts/config/resources/nsis/installerSidebar.bmp",
+      "uninstallerSidebar": "./scripts/config/resources/nsis/installerSidebar.bmp",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Bot Framework Emulator (V4)"
+      "shortcutName": "Bot Framework Emulator (V4)",
+      "oneClick": false
     },
     "mac": {
       "artifactName": "BotFramework-Emulator-${version}-mac.${ext}",
@@ -249,7 +253,11 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "This app requires microphone access to record audio."
+      },
+      "entitlements": "./scripts/config/resources/entitlements.plist"
     },
     "dmg": {
       "background": "./scripts/config/resources/background.tiff",

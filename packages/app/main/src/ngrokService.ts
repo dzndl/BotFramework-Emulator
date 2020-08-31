@@ -41,7 +41,6 @@ import {
   isLocalHostUrl,
   LogItem,
   LogLevel,
-  ngrokExpirationItem,
   textItem,
 } from '@bfemulator/sdk-shared';
 
@@ -75,13 +74,7 @@ export class NgrokService {
     if (this.pendingRecycle) {
       await this.pendingRecycle;
     }
-    if (this.ngrok.running()) {
-      return this.serviceUrl;
-    }
-    const { bypassNgrokLocalhost, runNgrokAtStartup } = getSettings().framework;
-    // Use ngrok
-    const local = !botUrl || isLocalHostUrl(botUrl);
-    if (runNgrokAtStartup || !local || (local && !bypassNgrokLocalhost)) {
+    if (this.isUsingNgrok(botUrl)) {
       if (!this.ngrok.running()) {
         await this.startup();
       }
@@ -182,17 +175,16 @@ export class NgrokService {
     }
   }
 
+  public async pingTunnel(): Promise<void> {
+    await this.ngrok.checkTunnelStatus();
+  }
+
   public get ngrokEmitter(): EventEmitter {
     return this.ngrok.ngrokEmitter || undefined;
   }
 
   public get running(): boolean {
     return this.ngrok.running() || false;
-  }
-
-  /** Logs a message in all active conversations that ngrok has expired */
-  public broadcastNgrokExpired(): void {
-    this.broadcast(ngrokExpirationItem('ngrok tunnel has expired.'));
   }
 
   /** Logs messages signifying that ngrok has reconnected in all active conversations */
@@ -207,6 +199,12 @@ export class NgrokService {
     } else {
       broadcast(textItem(LogLevel.Debug, 'Will use ngrok for local addresses'));
     }
+  }
+
+  /** Logs messages signifying that ngrok has reconnected in all active conversations */
+  public broadcastNgrokError(errorMessage: string): void {
+    const { broadcast } = this;
+    broadcast(textItem(LogLevel.Error, errorMessage));
   }
 
   /** Logs an item to all open conversations */
@@ -225,12 +223,15 @@ export class NgrokService {
     if (this.spawnErr) {
       emulatorApplication.mainWindow.logService.logToChat(
         conversationId,
-        textItem(LogLevel.Error, 'Failed to spawn ngrok'),
+        textItem(
+          LogLevel.Error,
+          'Failed to spawn ngrok. Please go to the Ngrok Status Viewer and download the log file for a more detailed view of the error.'
+        ),
         exceptionItem(this.spawnErr)
       );
     } else if (!this.ngrokPath) {
       this.reportNotConfigured(conversationId);
-    } else if (this.ngrok.running()) {
+    } else if (this.isUsingNgrok(botUrl)) {
       this.reportRunning(conversationId);
     } else {
       emulatorApplication.mainWindow.logService.logToChat(
@@ -304,5 +305,11 @@ export class NgrokService {
       // port = +parts[1].trim();
     }
     this.localhost = hostname;
+  }
+
+  private isUsingNgrok(botUrl: string) {
+    const { bypassNgrokLocalhost, runNgrokAtStartup } = getSettings().framework;
+    const local = !botUrl || isLocalHostUrl(botUrl);
+    return runNgrokAtStartup || !local || (local && !bypassNgrokLocalhost);
   }
 }

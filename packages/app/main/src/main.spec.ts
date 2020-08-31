@@ -43,6 +43,7 @@ jest.mock('electron', () => ({
   app: {
     on: () => void 0,
     setName: () => void 0,
+    getPath: () => '',
   },
   ipcMain: new Proxy(
     {},
@@ -70,6 +71,12 @@ jest.mock('electron', () => ({
     isInvertedColorScheme: jest.fn(() => true),
     on: jest.fn(() => null),
     onInvertedColorSchemeChanged: jest.fn(() => true),
+  },
+}));
+
+jest.mock('./server/webSocketServer', () => ({
+  WebSocketServer: {
+    init: jest.fn(),
   },
 }));
 

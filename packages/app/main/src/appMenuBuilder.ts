@@ -31,16 +31,22 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-import { BotInfo, SharedConstants, UpdateStatus } from '@bfemulator/app-shared';
+import {
+  BotInfo,
+  isLinux,
+  isMac,
+  isWindows,
+  rememberTheme,
+  SharedConstants,
+  UpdateStatus,
+} from '@bfemulator/app-shared';
 import { CommandServiceImpl, CommandServiceInstance, ConversationService } from '@bfemulator/sdk-shared';
 import { app, clipboard, Menu, MenuItem, MenuItemConstructorOptions, shell } from 'electron';
 
 import { AppUpdater } from './appUpdater';
 import { BotHelpers } from './botHelpers';
 import { Emulator } from './emulator';
-import { rememberTheme } from './state/actions/windowStateActions';
 import { TelemetryService } from './telemetry';
-import { isMac } from './utils';
 import { store } from './state';
 import { getLocalhostServiceUrl } from './utils/getLocalhostServiceUrl';
 import { getCurrentConversationId } from './state/helpers/chatHelpers';
@@ -73,9 +79,16 @@ export class AppMenuBuilder {
 
   /** Called on app startup */
   public static async initAppMenu(): Promise<void> {
-    // show an HTML app menu on Windows (a11y)
-    if (process.platform === 'win32') {
+    // show an HTML app menu on Windows & Linux (a11y)
+    if (isWindows()) {
       Menu.setApplicationMenu(null);
+      return;
+    }
+
+    // Work-around for Linux. Menu.setApplicationMenu(null) does not work on v4.x (https://github.com/electron/electron/issues/16521)
+    // Comes with the side effect of having an empty app menu bar at the top of the window.
+    if (isLinux()) {
+      Menu.setApplicationMenu(Menu.buildFromTemplate([]));
       return;
     }
 
@@ -183,7 +196,7 @@ export class AppMenuBuilder {
 
   /** Returns the template to construct a file menu that reflects updated state */
   private static getUpdatedFileMenuContent(recentBotsMenu: Menu = new Menu()): MenuOpts[] {
-    const { Azure, UI, Bot, Emulator: EmulatorCommands } = SharedConstants.Commands;
+    const { Azure, UI, Bot, Emulator: EmulatorCommands, Ngrok } = SharedConstants.Commands;
 
     // TODO - localization
     const subMenu: MenuOpts[] = [
@@ -210,13 +223,16 @@ export class AppMenuBuilder {
       {
         label: 'Open Transcript...',
         click: () => {
-          AppMenuBuilder.commandService.remoteCall(EmulatorCommands.PromptToOpenTranscript).catch(err => {
-            // eslint-disable-next-line no-console
-            console.error('Error opening transcript file from menu: ', err);
-          });
+          AppMenuBuilder.commandService.remoteCall(EmulatorCommands.PromptToOpenTranscript);
         },
       },
       { type: 'separator' },
+      {
+        label: 'Open Ngrok Status Viewer...',
+        click: () => {
+          AppMenuBuilder.commandService.call(Ngrok.OpenStatusViewer);
+        },
+      },
     ];
 
     const activeBot = BotHelpers.getActiveBot();

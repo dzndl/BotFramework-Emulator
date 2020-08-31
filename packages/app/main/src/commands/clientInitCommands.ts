@@ -30,11 +30,18 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
+
 import { dialog } from 'electron';
-import { SharedConstants } from '@bfemulator/app-shared';
+import {
+  pushClientAwareSettings,
+  rememberTheme,
+  setAvailableThemes,
+  setFrameworkSettings,
+  SharedConstants,
+} from '@bfemulator/app-shared';
+import * as BotActions from '@bfemulator/app-shared/built/state/actions/botActions';
 import { Command, CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
 
-import * as BotActions from '../state/actions/botActions';
 import { Protocol } from '../constants';
 import { ExtensionManagerImpl } from '../extensions';
 import { Migrator } from '../migrator';
@@ -42,9 +49,7 @@ import { ProtocolHandler } from '../protocolHandler';
 import { dispatch, getSettings, store } from '../state/store';
 import { getBotsFromDisk, getThemes } from '../utils';
 import { openFileFromCommandLine } from '../utils/openFileFromCommandLine';
-import { setFrameworkSettings } from '../state/actions/frameworkSettingsActions';
 import { AppMenuBuilder } from '../appMenuBuilder';
-import { setAvailableThemes, rememberTheme } from '../state/actions/windowStateActions';
 
 const Commands = SharedConstants.Commands;
 
@@ -73,6 +78,7 @@ export class ClientInitCommands {
     dispatch(rememberTheme(windowState.theme));
     dispatch(setAvailableThemes(getThemes()));
     dispatch(setFrameworkSettings(framework)); // also calls pushClientAwareSettings(), which also starts the Emulator rest server (TODO: separate these out)
+    dispatch(pushClientAwareSettings());
     // Load extensions
     ExtensionManagerImpl.unloadExtensions();
     ExtensionManagerImpl.loadExtensions();
@@ -103,8 +109,8 @@ export class ClientInitCommands {
       ProtocolHandler.parseProtocolUrlAndDispatch(protocolArg);
     }
 
-    // Parse command line args to see if we are opening a .bot or .transcript file
-    const fileToBeOpened = args.find(arg => /(\.transcript)|(\.bot)$/.test(arg));
+    // Parse command line args to see if we are opening a .bot, .chat, or .transcript file
+    const fileToBeOpened = args.find(arg => /(\.transcript)|(\.chat)|(\.bot)$/.test(arg));
     if (fileToBeOpened) {
       await openFileFromCommandLine(fileToBeOpened, this.commandService);
     }

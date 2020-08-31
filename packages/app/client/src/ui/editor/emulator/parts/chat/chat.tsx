@@ -31,8 +31,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-import { ValueTypes } from '@bfemulator/app-shared';
-import { User } from '@bfemulator/sdk-shared';
+import { ValueTypes, RestartConversationStatus } from '@bfemulator/app-shared';
 import { Activity, ActivityTypes } from 'botframework-schema';
 import ReactWebChat, { createStyleSet } from 'botframework-webchat';
 import * as React from 'react';
@@ -44,21 +43,22 @@ import { OuterActivityWrapperContainer } from './outerActivityWrapperContainer';
 import * as styles from './chat.scss';
 import webChatStyleOptions from './webChatTheme';
 import { TraceActivityContainer } from './traceActivityContainer';
+import { ConnectionMessageContainer } from './connectionMessageContainer';
 
 export interface ChatProps {
   botId?: string;
   conversationId?: string;
+  currentUserId?: string;
   directLine?: DirectLine;
   documentId?: string;
   mode?: EmulatorMode;
-  currentUser?: User;
   locale?: string;
   webSpeechPonyfillFactory?: () => any;
-  pendingSpeechTokenRetrieval?: boolean;
   showContextMenuForActivity?: (activity: Partial<Activity>) => void;
   setInspectorObject?: (documentId: string, activity: Partial<Activity & { showInInspector: true }>) => void;
   webchatStore?: any;
   showOpenUrlDialog?: (url) => any;
+  restartStatus: RestartConversationStatus;
 }
 
 interface ChatState {
@@ -67,14 +67,13 @@ interface ChatState {
 
 export class Chat extends PureComponent<ChatProps, ChatState> {
   public state = { waitForSpeechToken: false } as ChatState;
-  private activityMap: { [activityId: string]: Activity };
+  private activityMap: { [activityId: string]: Activity } = {};
 
   public render() {
-    this.activityMap = {};
     const {
       botId,
-      currentUser,
       conversationId,
+      currentUserId = '',
       directLine,
       locale,
       mode,
@@ -82,20 +81,31 @@ export class Chat extends PureComponent<ChatProps, ChatState> {
       webSpeechPonyfillFactory,
     } = this.props;
 
-    const isDisabled = mode === 'transcript' || mode === 'debug';
+    const currentUser = { id: currentUserId, name: 'User' };
+    const isDisabled =
+      mode === 'transcript' || mode === 'debug' || this.props.restartStatus === RestartConversationStatus.Started;
 
     // Due to needing to make idiosyncratic style changes, Emulator is using `createStyleSet` instead of `createStyleOptions`. The object below: {...webChatStyleOptions, hideSendBox...} was formerly passed into the `styleOptions` parameter of React Web Chat. If further styling modifications are desired using styleOptions, simply pass it into the same object in createStyleSet below.
 
     const styleSet = createStyleSet({ ...webChatStyleOptions, hideSendBox: isDisabled });
 
-    styleSet.uploadButton = {
-      ...styleSet.uploadButton,
-      padding: '1px',
+    // Overriding default styles of webchat as these properties are not exposed directly
+    styleSet.fileContent = {
+      ...styleSet.fileContent,
+      background: styles.bubbleBackground,
+      '& .webchat__fileContent__fileName': {
+        color: styles.bubbleContentColor,
+      },
+      '& .webchat__fileContent__size': {
+        color: styles.bubbleContentColor,
+      },
+      '& .webchat__fileContent__downloadIcon': {
+        fill: styles.bubbleContentColor,
+      },
+      '& .webchat__fileContent__badge': {
+        padding: '4px',
+      },
     };
-
-    if (this.props.pendingSpeechTokenRetrieval) {
-      return <div className={styles.disconnected}>Connecting...</div>;
-    }
 
     if (directLine) {
       const bot = {
@@ -119,6 +129,7 @@ export class Chat extends PureComponent<ChatProps, ChatState> {
             username={currentUser.name || 'User'}
             webSpeechPonyfillFactory={webSpeechPonyfillFactory}
           />
+          <ConnectionMessageContainer documentId={this.props.documentId} />
         </div>
       );
     }
@@ -127,6 +138,11 @@ export class Chat extends PureComponent<ChatProps, ChatState> {
   }
 
   private activityWrapper(next, card, children): ReactNode {
+    let childrenContents = null;
+    const middlewareResult = next(card);
+    if (middlewareResult) {
+      childrenContents = middlewareResult(children);
+    }
     return (
       <OuterActivityWrapperContainer
         card={card}
@@ -135,7 +151,7 @@ export class Chat extends PureComponent<ChatProps, ChatState> {
         onItemRendererClick={this.onItemRendererClick}
         onItemRendererKeyDown={this.onItemRendererKeyDown}
       >
-        {next(card)(children)}
+        {childrenContents}
       </OuterActivityWrapperContainer>
     );
   }
@@ -150,10 +166,19 @@ export class Chat extends PureComponent<ChatProps, ChatState> {
         popup.location.href = url;
         break;
       }
+
       case 'downloadFile':
+      //Fall through
+
       case 'playAudio':
+      //Fall through
+
       case 'playVideo':
+      //Fall through
+
       case 'showImage':
+      //Fall through
+
       case 'openUrl':
         if (value) {
           this.props.showOpenUrlDialog(value).then(result => {

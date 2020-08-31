@@ -35,38 +35,41 @@ import * as React from 'react';
 import { Provider } from 'react-redux';
 import { createStore } from 'redux';
 import { mount, shallow, ReactWrapper, ShallowWrapper } from 'enzyme';
-import { SharedConstants } from '@bfemulator/app-shared';
-import base64Url from 'base64url';
+import {
+  disable as disablePresentationMode,
+  enable as enablePresentationMode,
+  executeCommand,
+  restartConversation,
+  SharedConstants,
+  RestartConversationStatus,
+} from '@bfemulator/app-shared';
 import { CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
+import { RestartConversationOptions } from '@bfemulator/app-shared';
 
-import { disable, enable } from '../../../state/actions/presentationActions';
-import { clearLog, newConversation, setInspectorObjects } from '../../../state/actions/chatActions';
-import { updateDocument } from '../../../state/actions/editorActions';
-import { executeCommand } from '../../../state/actions/commandActions';
-
-import { Emulator, RestartConversationOptions } from './emulator';
+import { Emulator } from './emulator';
 import { EmulatorContainer } from './emulatorContainer';
 
-const { encode } = base64Url;
-
 let mockCallsMade, mockRemoteCallsMade;
+const replayConversationText = 'Stop Replaying Conversation';
 const mockSharedConstants = SharedConstants;
+
 jest.mock('./chatPanel/chatPanel', () => ({
   ChatPanel: jest.fn(() => <div />),
 }));
+
 jest.mock('./logPanel/logPanel', () => {
   return jest.fn(() => <div />);
 });
+
 jest.mock('./playbackBar/playbackBar', () => {
   return jest.fn(() => <div />);
 });
+
 jest.mock('./emulator.scss', () => ({}));
 jest.mock('./parts', () => ({
   InspectorContainer: jest.fn(() => <div />),
 }));
-jest.mock('./toolbar/toolbar', () => ({
-  ToolBar: jest.fn(() => <div />),
-}));
+
 jest.mock('@bfemulator/sdk-shared/build/utils/misc', () => ({
   uniqueId: () => 'someUniqueId',
   uniqueIdv4: () => 'newUserId',
@@ -163,6 +166,7 @@ describe('<EmulatorContainer/>', () => {
         pendingSpeechTokenRetrieval: null,
         webChatStores: {},
         webSpeechFactories: {},
+        restartStatus: {},
       },
       editor: {
         activeEditor: 'primary',
@@ -194,32 +198,9 @@ describe('<EmulatorContainer/>', () => {
     expect(instance).not.toBe(true);
   });
 
-  it('should determine when to start a new conversation', () => {
-    wrapper = shallow(
-      <Emulator
-        conversationId={'convo1'}
-        createErrorNotification={jest.fn(() => null)}
-        documentId={'doc1'}
-        mode={'transcript'}
-        newConversation={jest.fn(() => null)}
-      />
-    );
-    instance = wrapper.instance();
-    expect(instance.shouldStartNewConversation()).toBe(true);
-    wrapper.setProps({ directLine: { conversationId: 'convo2' } });
-    expect(instance.shouldStartNewConversation()).toBe(true);
-    wrapper.setProps({ directLine: { conversationId: 'convo1' } });
-    expect(instance.shouldStartNewConversation()).toBe(false);
-  });
-
   it('should render the presentation view', () => {
     wrapper = shallow(
-      <Emulator
-        createErrorNotification={jest.fn(() => null)}
-        documentId={'doc1'}
-        mode={'transcript'}
-        newConversation={jest.fn(() => null)}
-      />
+      <Emulator createErrorNotification={jest.fn(() => null)} documentId={'doc1'} mode={'transcript'} />
     );
     instance = wrapper.instance();
     const presentationView = instance.renderPresentationView();
@@ -229,12 +210,7 @@ describe('<EmulatorContainer/>', () => {
 
   it('should render the default view', () => {
     wrapper = shallow(
-      <Emulator
-        createErrorNotification={jest.fn(() => null)}
-        documentId={'doc1'}
-        mode={'transcript'}
-        newConversation={jest.fn(() => null)}
-      />
+      <Emulator createErrorNotification={jest.fn(() => null)} documentId={'doc1'} mode={'transcript'} />
     );
     instance = wrapper.instance();
     const defaultView = instance.renderDefaultView();
@@ -253,13 +229,7 @@ describe('<EmulatorContainer/>', () => {
       ],
     };
     wrapper = shallow(
-      <Emulator
-        createErrorNotification={jest.fn(() => null)}
-        documentId={'doc1'}
-        mode={'transcript'}
-        newConversation={jest.fn(() => null)}
-        ui={ui}
-      />
+      <Emulator createErrorNotification={jest.fn(() => null)} documentId={'doc1'} mode={'transcript'} ui={ui} />
     );
     instance = wrapper.instance();
     const verticalSplitterSizes = instance.getVerticalSplitterSizes();
@@ -278,13 +248,7 @@ describe('<EmulatorContainer/>', () => {
       verticalSplitter: [],
     };
     wrapper = shallow(
-      <Emulator
-        createErrorNotification={jest.fn(() => null)}
-        documentId={'doc1'}
-        mode={'transcript'}
-        newConversation={jest.fn(() => null)}
-        ui={ui}
-      />
+      <Emulator createErrorNotification={jest.fn(() => null)} documentId={'doc1'} mode={'transcript'} ui={ui} />
     );
     instance = wrapper.instance();
     const horizontalSplitterSizes = instance.getHorizontalSplitterSizes();
@@ -295,8 +259,8 @@ describe('<EmulatorContainer/>', () => {
   it('should restart the conversation on Ctrl/Cmd + Shift + R', () => {
     wrapper = shallow(
       <Emulator
+        activeDocumentId={'doc1'}
         createErrorNotification={jest.fn(() => null)}
-        newConversation={jest.fn(() => null)}
         mode={'transcript'}
         documentId={'doc1'}
       />
@@ -337,257 +301,85 @@ describe('<EmulatorContainer/>', () => {
   it('should enable presentation mode', () => {
     instance.onPresentationClick(true);
 
-    expect(mockDispatch).toHaveBeenCalledWith(enable());
+    expect(mockDispatch).toHaveBeenCalledWith(enablePresentationMode());
   });
 
   it('should disable presentation mode', () => {
     instance.onPresentationClick(false);
 
-    expect(mockDispatch).toHaveBeenCalledWith(disable());
+    expect(mockDispatch).toHaveBeenCalledWith(disablePresentationMode());
   });
 
   it('should export a transcript', async () => {
     await instance.onExportTranscriptClick();
 
-    expect(mockRemoteCallsMade).toHaveLength(1);
     expect(mockDispatch).toHaveBeenCalledWith(
       executeCommand(true, SharedConstants.Commands.Emulator.SaveTranscriptToFile, null, 32, 'convo1')
     );
   });
 
-  it('should start a new conversation', async () => {
-    wrapper = shallow(
-      <Emulator
-        createErrorNotification={jest.fn(() => null)}
-        newConversation={jest.fn(() => null)}
-        mode={'livechat'}
-        documentId={'doc1'}
-        endpointId={'endpoint1'}
-      />
-    );
-    instance = wrapper.instance();
-    const options = {
-      conversationId: 'someUniqueId|livechat',
-      mode: 'livechat',
-      endpointId: 'endpoint1',
-      userId: 'newUserId',
-    };
-
-    // wait for componentWillMount to start conversation for the first time
-    await new Promise(resolve => {
-      setTimeout(resolve, 500);
+  it('should start over a conversation with a new user id on click', () => {
+    const mockStore = createStore((_state, _action) => mockStoreState);
+    mockDispatch = jest.spyOn(mockStore, 'dispatch').mockImplementation((action: any) => {
+      if (action && action.payload && action.payload.resolver) {
+        action.payload.resolver();
+      }
+      return action;
     });
-
-    const initConversationSpy = jest.spyOn(instance, 'initConversation');
-    instance.conversationInitRequested = false;
-    mockRemoteCallsMade = [];
-    await instance.startNewConversation(undefined, true, true);
-    expect(mockRemoteCallsMade).toHaveLength(1);
-    expect(initConversationSpy).toHaveBeenCalledWith(instance.props, options);
-  });
-
-  it('should start a new conversation when a new document is given as props', async () => {
-    const startNewConversationSpy = jest.spyOn(instance, 'startNewConversation');
-    const nextProps = { document: { documentId: 'newDoc' } };
-    instance.componentWillReceiveProps(nextProps);
-    expect(startNewConversationSpy).toHaveBeenCalledWith(nextProps);
-  });
-
-  it('should start a new conversation with a new conversation id', async () => {
-    wrapper = shallow(
-      <Emulator
-        createErrorNotification={jest.fn(() => null)}
-        newConversation={jest.fn(() => null)}
-        mode={'livechat'}
-        documentId={'doc1'}
-        endpointId={'endpoint1'}
-        userId={'someUserId'}
-      />
+    wrapper = mount(
+      <Provider store={mockStore}>
+        <EmulatorContainer
+          documentId={'doc1'}
+          url={'someUrl'}
+          mode={'livechat'}
+          conversationId={'convo1'}
+          currentRestartConversationOption={RestartConversationOptions.NewUserId}
+        />
+      </Provider>
     );
-    instance = wrapper.instance();
-    const mockInitConversation = jest.fn(() => null);
-    instance.initConversation = mockInitConversation;
-    const options = {
-      conversationId: 'someUniqueId|livechat',
-      mode: instance.props.mode,
-      endpointId: instance.props.endpointId,
-      userId: 'someUserId',
-    };
 
-    // wait for componentWillMount to start conversation for the first time
-    await new Promise(resolve => {
-      setTimeout(resolve, 500);
-    });
-    mockInitConversation.mockClear();
+    node = wrapper.find(Emulator);
+    instance = node.instance();
+    instance.onStartOverClick();
 
-    await instance.startNewConversation(undefined, true, false);
-
-    expect(mockInitConversation).toHaveBeenCalledWith(instance.props, options);
-  });
-
-  it('should start a new conversation with a new user id', async () => {
-    wrapper = shallow(
-      <Emulator
-        conversationId={undefined}
-        createErrorNotification={jest.fn(() => null)}
-        documentId={'doc1'}
-        endpointId={'endpoint1'}
-        mode={'livechat'}
-        newConversation={jest.fn(() => null)}
-      />
-    );
-    instance = wrapper.instance();
-    const mockInitConversation = jest.fn(() => null);
-    instance.initConversation = mockInitConversation;
-    const options = {
-      conversationId: 'someUniqueId|livechat',
-      mode: instance.props.mode,
-      endpointId: instance.props.endpointId,
-      userId: 'newUserId',
-    };
-
-    // wait for componentWillMount to start conversation for the first time
-    await new Promise(resolve => {
-      setTimeout(resolve, 500);
-    });
-    mockInitConversation.mockClear();
-    mockRemoteCallsMade = [];
-
-    await instance.startNewConversation(undefined, false, true);
-
-    expect(mockRemoteCallsMade).toHaveLength(1);
-    expect(mockRemoteCallsMade[0].commandName).toBe(SharedConstants.Commands.Emulator.SetCurrentUser);
-    expect(mockRemoteCallsMade[0].args[0]).toBe('newUserId');
-    expect(mockInitConversation).toHaveBeenCalledWith(instance.props, options);
-  });
-
-  it('should start over a conversation with a new user id on click', async () => {
-    const mockStartNewConversation = jest.fn(async () => Promise.resolve(true));
-    instance.startNewConversation = mockStartNewConversation;
-    await instance.onStartOverClick();
-    expect(mockDispatch).toHaveBeenCalledWith(clearLog('doc1', jasmine.any(Function)));
-    expect(mockDispatch).toHaveBeenCalledWith(setInspectorObjects('doc1', []));
     expect(mockDispatch).toHaveBeenCalledWith(
       executeCommand(true, SharedConstants.Commands.Telemetry.TrackEvent, null, 'conversation_restart', {
         userId: 'new',
       })
     );
-    expect(mockStartNewConversation).toHaveBeenCalledWith(undefined, true, true);
+    expect(mockDispatch).toHaveBeenCalledWith(restartConversation('doc1', true, true));
   });
 
-  it('should start over a conversation with the same user id on click', async () => {
-    const mockStartNewConversation = jest.fn(async () => Promise.resolve(true));
-    instance.startNewConversation = mockStartNewConversation;
-    await instance.onStartOverClick(RestartConversationOptions.SameUserId);
+  it('should start over a conversation with the same user id on click', () => {
+    const mockStore = createStore((_state, _action) => mockStoreState);
+    mockDispatch = jest.spyOn(mockStore, 'dispatch').mockImplementation((action: any) => {
+      if (action && action.payload && action.payload.resolver) {
+        action.payload.resolver();
+      }
+      return action;
+    });
+    wrapper = mount(
+      <Provider store={mockStore}>
+        <EmulatorContainer
+          documentId={'doc1'}
+          url={'someUrl'}
+          mode={'livechat'}
+          conversationId={'convo1'}
+          currentRestartConversationOption={RestartConversationOptions.SameUserId}
+        />
+      </Provider>
+    );
 
-    expect(mockDispatch).toHaveBeenCalledWith(clearLog('doc1', jasmine.any(Function)));
-    expect(mockDispatch).toHaveBeenCalledWith(setInspectorObjects('doc1', []));
+    node = wrapper.find(Emulator);
+    instance = node.instance();
+    instance.onStartOverClick();
+
     expect(mockDispatch).toHaveBeenCalledWith(
       executeCommand(true, SharedConstants.Commands.Telemetry.TrackEvent, null, 'conversation_restart', {
         userId: 'same',
       })
     );
-    expect(mockStartNewConversation).toHaveBeenCalledWith(undefined, true, false);
-  });
-
-  it('should init a conversation', () => {
-    const mockProps = {
-      documentId: 'doc1',
-      url: 'someUrl',
-    };
-    const mockOptions = { conversationId: 'convo1' };
-    const encodedOptions = encode(JSON.stringify(mockOptions));
-    instance.initConversation(mockProps, mockOptions, {}, {});
-
-    expect(mockDispatch).toHaveBeenCalledWith(
-      newConversation('doc1', {
-        conversationId: 'convo1',
-        directLine: {
-          secret: encodedOptions,
-          domain: 'someUrl/v3/directline',
-          webSocket: false,
-        },
-      })
-    );
-  });
-
-  it('should start a new conversation from transcript in memory', async () => {
-    const remoteCallSpy = jest
-      .spyOn(commandService, 'remoteCall')
-      .mockResolvedValueOnce() // SetCurrentUser
-      .mockResolvedValueOnce({ conversationId: 'someConvoId' }); // NewTranscript
-
-    wrapper = shallow(
-      <Emulator
-        activities={[]}
-        botId={'someBotId'}
-        documentId={'someDocId'}
-        inMemory={true}
-        mode={'transcript'}
-        newConversation={jest.fn()}
-        userId={'someUserId'}
-      />
-    );
-
-    // wait for the startNewConversation method to finish
-    await new Promise(resolve => {
-      setTimeout(resolve, 500);
-    });
-
-    expect(remoteCallSpy).toHaveBeenCalledWith(
-      SharedConstants.Commands.Emulator.NewTranscript,
-      'someUniqueId|transcript'
-    );
-    expect(remoteCallSpy).toHaveBeenCalledWith(
-      SharedConstants.Commands.Emulator.FeedTranscriptFromMemory,
-      'someConvoId',
-      'someBotId',
-      'someUserId',
-      []
-    );
-    remoteCallSpy.mockClear();
-  });
-
-  it('should start a new conversation from transcript on disk', async () => {
-    const mockUpdateDocument = jest.fn((docId, fileInfo) => {
-      mockDispatch(updateDocument(docId, fileInfo));
-    });
-    const remoteCallSpy = jest
-      .spyOn(commandService, 'remoteCall')
-      .mockResolvedValueOnce() // SetCurrentUser
-      .mockResolvedValueOnce({ conversationId: 'someConvoId' }) // NewTranscript
-      .mockResolvedValueOnce({ meta: 'some file info' }); // FeedTranscriptFromDisk
-
-    wrapper = shallow(
-      <Emulator
-        activities={[]}
-        botId={'someBotId'}
-        documentId={'someDocId'}
-        inMemory={false}
-        mode={'transcript'}
-        newConversation={jest.fn()}
-        updateDocument={mockUpdateDocument}
-        userId={'someUserId'}
-      />
-    );
-
-    // wait for the startNewConversation method to finish
-    await new Promise(resolve => {
-      setTimeout(resolve, 500);
-    });
-
-    expect(remoteCallSpy).toHaveBeenCalledWith(
-      SharedConstants.Commands.Emulator.NewTranscript,
-      'someUniqueId|transcript'
-    );
-    expect(remoteCallSpy).toHaveBeenCalledWith(
-      SharedConstants.Commands.Emulator.FeedTranscriptFromDisk,
-      'someConvoId',
-      'someBotId',
-      'someUserId',
-      'someDocId'
-    );
-    expect(mockDispatch).toHaveBeenCalledWith(updateDocument('someDocId', { meta: 'some file info' }));
+    expect(mockDispatch).toHaveBeenCalledWith(restartConversation('doc1', true, false));
   });
 
   it('should set a restart button ref', () => {
@@ -595,5 +387,62 @@ describe('<EmulatorContainer/>', () => {
     instance.setRestartButtonRef(mockButtonRef);
 
     expect(instance.restartButtonRef).toBe(mockButtonRef);
+  });
+
+  it('should show "Stop Replaying Conversation" when in Replay mode', () => {
+    let emulatorProps = {
+      documentId: 'doc1',
+      url: 'some-url',
+      mode: 'livechat',
+      conversationId: '123',
+      presentationModeEnabled: false,
+      restartStatus: RestartConversationStatus.Started,
+      onSetRestartConversationOptionClick: jest.fn(),
+      ui: {},
+    };
+    const mockStore = createStore((_state, _action) => mockStoreState);
+    wrapper = mount(
+      <Provider store={mockStore}>
+        <Emulator {...emulatorProps} />
+      </Provider>
+    );
+    node = wrapper.find(Emulator);
+    expect(wrapper.text().includes(replayConversationText)).toBeTruthy();
+
+    emulatorProps = {
+      ...emulatorProps,
+      restartStatus: RestartConversationStatus.Stop,
+    };
+    wrapper.setProps({
+      children: <Emulator {...emulatorProps} />,
+    });
+    expect(wrapper.text().includes(replayConversationText)).toBeFalsy();
+
+    emulatorProps = {
+      ...emulatorProps,
+      restartStatus: undefined,
+    };
+    wrapper.setProps({
+      children: <Emulator {...emulatorProps} />,
+    });
+    expect(wrapper.text().includes(replayConversationText)).toBeFalsy();
+
+    emulatorProps = {
+      ...emulatorProps,
+      restartStatus: RestartConversationStatus.Rejected,
+    };
+    wrapper.setProps({
+      children: <Emulator {...emulatorProps} />,
+    });
+    expect(wrapper.text().includes(replayConversationText)).toBeFalsy();
+
+    emulatorProps = {
+      ...emulatorProps,
+      restartStatus: RestartConversationStatus.Started,
+    };
+    wrapper.setProps({
+      children: <Emulator {...emulatorProps} />,
+    });
+    expect(wrapper.text().includes(replayConversationText)).toBeTruthy();
   });
 });

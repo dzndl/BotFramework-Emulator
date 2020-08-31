@@ -31,7 +31,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-import { newNotification, SharedConstants } from '@bfemulator/app-shared';
+import { beginAdd, executeCommand, newNotification, SharedConstants } from '@bfemulator/app-shared';
 import { BotConfigWithPath, BotConfigWithPathImpl, uniqueId } from '@bfemulator/sdk-shared';
 import {
   Checkbox,
@@ -51,13 +51,11 @@ import { ChangeEvent } from 'react';
 import * as React from 'react';
 import { CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
 
-import { beginAdd } from '../../../state/actions/notificationActions';
 import { store } from '../../../state/store';
-import { generateBotSecret, debounce } from '../../../utils';
+import { generateBotSecret, debounce, copyTextToClipboard } from '../../../utils';
 import { ActiveBotHelper } from '../../helpers/activeBotHelper';
 import { DialogService } from '../service';
 import { ariaAlertService } from '../../a11y';
-import { executeCommand } from '../../../state/actions/commandActions';
 import * as dialogStyles from '../dialogStyles.scss';
 
 import * as styles from './botCreationDialog.scss';
@@ -161,7 +159,7 @@ export class BotCreationDialog extends React.Component<BotCreationDialogProps, B
           <Row align={RowAlignment.Bottom}>
             <Checkbox label="Azure for US Government" checked={isAzureGov} onChange={this.onChannelServiceChange} />
             <LinkButton
-              ariaLabel="Learn more about Azure for US Government.&nbsp;"
+              ariaLabel="Learn more about Azure for US Government."
               className={dialogStyles.dialogLink}
               linkRole={true}
               onClick={this.onAzureGovLinkClick}
@@ -297,13 +295,14 @@ export class BotCreationDialog extends React.Component<BotCreationDialogProps, B
     if (!this.state.encryptKey) {
       return null;
     }
-    const { secretInputRef } = this;
-    const { type } = secretInputRef;
-    secretInputRef.type = 'text';
-    secretInputRef.select();
-    window.document.execCommand('copy');
-    secretInputRef.type = type;
-    ariaAlertService.alert('Secret copied to clipboard.');
+    if (copyTextToClipboard(this.secretInputRef.value)) {
+      ariaAlertService.alert('Secret copied to clipboard.');
+    } else {
+      const err = 'Failed to copy secret to clipboard.';
+      ariaAlertService.alert(err);
+      // eslint-disable-next-line no-console
+      console.error(err);
+    }
   };
 
   // TODO: Re-enable ability to re-generate secret after 4.1

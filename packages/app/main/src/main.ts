@@ -30,11 +30,28 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
+
 import './commands';
 import * as path from 'path';
 import * as url from 'url';
 
-import { newNotification, Notification, PersistentSettings, SharedConstants } from '@bfemulator/app-shared';
+import {
+  addNotification,
+  azureLoggedInUserChanged,
+  isMac,
+  newNotification,
+  rememberBounds,
+  setOpenUrl,
+  updateNewTunnelInfo,
+  updateTunnelError,
+  updateTunnelStatus,
+  Notification,
+  PersistentSettings,
+  SharedConstants,
+  TunnelError,
+  TunnelInfo,
+  TunnelStatus,
+} from '@bfemulator/app-shared';
 import { app, BrowserWindow, Rectangle, screen, systemPreferences } from 'electron';
 import { CommandServiceImpl, CommandServiceInstance } from '@bfemulator/sdk-shared';
 
@@ -44,17 +61,17 @@ import { Protocol } from './constants';
 import { Emulator } from './emulator';
 import './fetchProxy';
 import { Window } from './platform/window';
-import { azureLoggedInUserChanged } from './state/actions/azureAuthActions';
-import { rememberBounds } from './state/actions/windowStateActions';
 import { dispatch, getSettings, store } from './state/store';
 import { TelemetryService } from './telemetry';
-import { botListsAreDifferent, ensureStoragePath, isMac, saveSettings, writeFile } from './utils';
+import { botListsAreDifferent, ensureStoragePath, saveSettings, writeFile } from './utils';
 import { openFileFromCommandLine } from './utils/openFileFromCommandLine';
 import { sendNotificationToClient } from './utils/sendNotificationToClient';
 import { WindowManager } from './windowManager';
 import { ProtocolHandler } from './protocolHandler';
-import { setOpenUrl } from './state/actions/protocolActions';
+import { WebSocketServer } from './server/webSocketServer';
 
+const genericTunnelError =
+  'Oops.. Your ngrok tunnel seems to have an error. Please check the Ngrok Status Viewer for more details';
 // start app startup timer
 const beginStartupTime = Date.now();
 
@@ -154,7 +171,9 @@ class EmulatorApplication {
   }
 
   private initializeNgrokListeners() {
-    Emulator.getInstance().ngrok.ngrokEmitter.on('expired', this.onNgrokSessionExpired);
+    Emulator.getInstance().ngrok.ngrokEmitter.on('onTunnelError', this.onTunnelError);
+    Emulator.getInstance().ngrok.ngrokEmitter.on('onNewTunnelConnected', this.onNewTunnelConnected);
+    Emulator.getInstance().ngrok.ngrokEmitter.on('onTunnelStatusPing', this.onTunnelStatusPing);
   }
 
   private initializeSystemPreferencesListeners() {
@@ -162,10 +181,11 @@ class EmulatorApplication {
   }
 
   private initializeAppListeners() {
-    app.on('ready', this.onAppReady);
     app.on('activate', this.onAppActivate);
-    app.on('will-finish-launching', this.onAppWillFinishLaunching);
+    app.on('ready', this.onAppReady);
     app.on('open-file', this.onAppOpenFile);
+    app.on('will-finish-launching', this.onAppWillFinishLaunching);
+    app.on('will-quit', this.onAppWillQuit);
   }
 
   // Main browser window listeners
@@ -191,6 +211,8 @@ class EmulatorApplication {
 
     // Renew arm token
     await this.renewArmToken();
+
+    await WebSocketServer.init();
 
     if (this.fileToOpen) {
       await openFileFromCommandLine(this.fileToOpen, this.commandService);
@@ -242,27 +264,29 @@ class EmulatorApplication {
     dispatch(rememberBounds(bounds));
   };
 
-  // ngrok listeners
-  private onNgrokSessionExpired = async () => {
-    // when ngrok expires, spawn notification to reconnect
-    const ngrokNotification: Notification = newNotification(
-      'Your ngrok tunnel instance has expired. Would you like to reconnect to a new tunnel?'
-    );
-    ngrokNotification.addButton('Dismiss', () => {
-      const { Commands } = SharedConstants;
+  private onTunnelStatusPing = async (status: TunnelStatus) => {
+    dispatch(updateTunnelStatus({ tunnelStatus: status }));
+  };
+
+  private onNewTunnelConnected = async (tunnelInfo: TunnelInfo) => {
+    dispatch(updateNewTunnelInfo(tunnelInfo));
+  };
+
+  private onTunnelError = async (response: TunnelError) => {
+    const { Commands } = SharedConstants;
+    dispatch(updateTunnelError({ ...response }));
+
+    const ngrokNotification: Notification = newNotification(genericTunnelError);
+    dispatch(addNotification(ngrokNotification.id));
+
+    this.commandService.call(Commands.Ngrok.OpenStatusViewer, false);
+
+    ngrokNotification.addButton('Debug Console', () => {
       this.commandService.remoteCall(Commands.Notifications.Remove, ngrokNotification.id);
-    });
-    ngrokNotification.addButton('Reconnect', async () => {
-      try {
-        const { Commands } = SharedConstants;
-        await this.commandService.call(Commands.Ngrok.Reconnect);
-        this.commandService.remoteCall(Commands.Notifications.Remove, ngrokNotification.id);
-      } catch (e) {
-        await sendNotificationToClient(newNotification(e), this.commandService);
-      }
+      this.commandService.call(Commands.Ngrok.OpenStatusViewer);
     });
     await sendNotificationToClient(ngrokNotification, this.commandService);
-    Emulator.getInstance().ngrok.broadcastNgrokExpired();
+    Emulator.getInstance().ngrok.broadcastNgrokError(genericTunnelError);
   };
 
   private onInvertedColorSchemeChanged = () => {
@@ -316,7 +340,11 @@ class EmulatorApplication {
     app.on('open-url', this.onAppOpenUrl);
   };
 
-  private onAppOpenUrl = (event: any, url: string): void => {
+  private onAppWillQuit = () => {
+    WebSocketServer.cleanup();
+  };
+
+  private onAppOpenUrl = (event: Event, url: string): void => {
     event.preventDefault();
     if (isMac()) {
       protocolUsed = true;
